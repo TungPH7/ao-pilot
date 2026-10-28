@@ -1,0 +1,27 @@
+{
+  "name": "ao-pilot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sandbox of ai-orchestrator: a small TypeScript package for the quality-gates live test, until Pilot 1 brings Next.js and NestJS",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "prepare": "node .ai-orchestrator/scripts/install-hooks.mjs",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"src/**/*.test.ts\"",
+    "pretest:coverage": "node -e \"require('node:fs').mkdirSync('coverage', { recursive: true })\"",
+    "test:coverage": "node --test --experimental-test-coverage --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info \"src/**/*.test.ts\"",
+    "build": "tsc -p tsconfig.build.json",
+    "precommit": "eslint --max-warnings=0 ."
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.19.2",
+    "eslint": "10.12.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.2"
+  }
+}

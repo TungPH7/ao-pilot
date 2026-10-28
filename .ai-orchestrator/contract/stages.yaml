@@ -73,7 +73,7 @@ stages:
     input: "PR đã approve"
     outputs:
       other: "Commit trên nhánh đích"
-    exit: "Branch protection pass"
+    exit: "merge-gate pass"
   - id: qa-verify
     name: "QA trên môi trường kiểm"
     roles: [qa]

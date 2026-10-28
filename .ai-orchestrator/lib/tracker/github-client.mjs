@@ -1,11 +1,11 @@
-// Thin GitHub REST client for one repository (tracker-integration spec section 5). Read-only, like the Jira client:
-// any method but GET is refused before the request leaves. The token comes from GITHUB_TOKEN in CI, or from
-// the GitHub CLI on your machine; readGitHubToken reads it.
+// Thin GitHub REST client for one repository (tracker-integration spec section 5). Read-only unless made with
+// write: true, like the Jira client: any method but GET is refused before the request leaves. The token comes from
+// GITHUB_TOKEN in CI, or from the GitHub CLI on your machine; readGitHubToken reads it.
 import { spawnSync } from 'node:child_process';
 
 const API = 'https://api.github.com';
 
-export function createGitHubClient({ repo, token, fetch = globalThis.fetch }) {
+export function createGitHubClient({ repo, token, fetch = globalThis.fetch, write = false }) {
   const headers = {
     Authorization: `Bearer ${token}`,
     Accept: 'application/vnd.github+json',
@@ -13,9 +13,12 @@ export function createGitHubClient({ repo, token, fetch = globalThis.fetch }) {
     'User-Agent': 'ai-orchestrator',
   };
 
-  async function send(method, url, label) {
-    if (method !== 'GET') throw new Error(`Read-only GitHub client refused ${method} ${label}`);
-    const res = await fetch(url, { method, headers });
+  async function send(method, url, label, body) {
+    if (method !== 'GET' && !write) throw new Error(`Read-only GitHub client refused ${method} ${label}`);
+    const res = await fetch(
+      url,
+      body === undefined ? { method, headers } : { method, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+    );
     if (!res.ok) throw new Error(`GitHub ${method} ${label} returned ${res.status}: ${(await res.text()).slice(0, 300)}`);
     return res;
   }
@@ -26,7 +29,11 @@ export function createGitHubClient({ repo, token, fetch = globalThis.fetch }) {
     return url;
   };
 
-  const request = async (method, path, query) => (await send(method, urlOf(path, query), path)).json();
+  // Writes such as a merge may answer 204 with no body.
+  async function request(method, path, query, body) {
+    const text = await (await send(method, urlOf(path, query), path, body)).text();
+    return text ? JSON.parse(text) : null;
+  }
   const get = (path, query) => request('GET', path, query);
 
   // Every item of a list, following the Link header. Most lists are arrays; a few, like check runs, keep their items
