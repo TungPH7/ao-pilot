@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createEngine } from '@secretlint/node';
+import { runNpm } from '../lib/quality/npm.mjs';
 import { scanStaged } from '../lib/quality/pre-commit.mjs';
 
 const git = (...args) => spawnSync('git', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
@@ -28,8 +29,7 @@ if (!scan.ok) {
 const packageFile = join(root, 'package.json');
 const scripts = existsSync(packageFile) ? (JSON.parse(readFileSync(packageFile, 'utf8')).scripts ?? {}) : {};
 if (scripts.precommit) {
-  // npm is npm.cmd on Windows, which Node only starts through a shell.
-  const run = spawnSync('npm', ['run', 'precommit'], { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' });
+  const run = runNpm(['run', 'precommit'], { cwd: root, stdio: 'inherit' });
   if (run.status !== 0) {
     console.error(`pre-commit: the project's precommit script failed (exit ${run.status})`);
     process.exit(1);

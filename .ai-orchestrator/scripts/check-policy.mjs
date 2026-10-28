@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { parse } from 'yaml';
 import { readGates } from '../lib/quality/gates.mjs';
+import { runNpm } from '../lib/quality/npm.mjs';
 import { auditProblems, checkConventions } from '../lib/quality/policy.mjs';
 import { addedLines, deletedTests, findSuppressions, loweredThresholds } from '../lib/quality/suppressions.mjs';
 
@@ -59,8 +60,8 @@ try {
   }
 
   if (existsSync(join(root, 'package-lock.json'))) {
-    // npm audit exits non-zero when it finds anything; its JSON is what counts. npm is npm.cmd on Windows.
-    const audit = run('npm', ['audit', '--json'], { cwd: root, shell: process.platform === 'win32' });
+    // npm audit exits non-zero when it finds anything; its JSON is what counts.
+    const audit = runNpm(['audit', '--json'], { cwd: root, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
     const report = JSON.parse(audit.stdout || '{}');
     if (report.error) throw new Error(`npm audit: ${report.error.summary ?? report.error.code}`);
     sections.push(['Dependencies', auditProblems(report, gates.dependencies, new Date().toISOString().slice(0, 10))]);
