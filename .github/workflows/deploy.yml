@@ -1,0 +1,23 @@
+# Pretend deployment for the tracker-integration live test (T18). A job with an environment makes GitHub create a
+# deployment and its statuses, which GitHub for Jira shows on the items and jira-sync reads.
+# develop goes to development, release/* to staging; any environment by hand.
+name: Deploy
+
+on:
+  push:
+    branches: [develop, 'release/**']
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        options: [development, staging, production]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || (github.ref_name == 'develop' && 'development' || 'staging') }}
+    steps:
+      - run: echo "Pretend to deploy ${{ github.sha }} of ${{ github.ref_name }}"

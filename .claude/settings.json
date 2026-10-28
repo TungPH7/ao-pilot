@@ -1,0 +1,24 @@
+{
+  "env": {
+    "AO_JIRA_SPACE": "DEMO",
+    "AO_APPROVERS": "TungPH7"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__atlassian__transitionJiraIssue",
+        "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/jira-guard.mjs\"" }]
+      },
+      {
+        "matcher": "Bash|mcp__.*",
+        "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/block-atlassian.mjs\"" }]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "mcp__atlassian__transitionJiraIssue",
+        "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/jira-rework.mjs\"" }]
+      }
+    ]
+  }
+}

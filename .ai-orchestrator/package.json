@@ -1,0 +1,9 @@
+{
+  "name": "ao-pilot-kit",
+  "private": true,
+  "description": "Copy of the ai-orchestrator kit libraries, made by hand for the tracker-integration live test (T15)",
+  "dependencies": {
+    "ajv": "8.20.0",
+    "yaml": "2.9.1"
+  }
+}
