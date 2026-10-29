@@ -4,8 +4,17 @@ export interface Line {
 }
 
 // The total of a cart, in the currency's smallest unit.
+// Throws a RangeError when a line has a quantity that is not a positive integer, or a negative price.
 export function total(lines: Line[]): number {
-  return lines.reduce((sum, line) => sum + line.price * line.quantity, 0);
+  return lines.reduce((sum, line) => {
+    if (!Number.isInteger(line.quantity) || line.quantity <= 0) {
+      throw new RangeError(`quantity must be a positive integer, got ${line.quantity}`);
+    }
+    if (line.price < 0) {
+      throw new RangeError(`price must not be negative, got ${line.price}`);
+    }
+    return sum + line.price * line.quantity;
+  }, 0);
 }
 
 const SHIPPING_FEE = 3000;
