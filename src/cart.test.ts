@@ -31,6 +31,9 @@ const badLines: Array<[string, Line[]]> = [
   ['a fractional quantity', [{ price: 100, quantity: 1.5 }]],
   ['a NaN quantity', [{ price: 100, quantity: NaN }]],
   ['a negative price', [{ price: -1, quantity: 1 }]],
+  ['a NaN price', [{ price: NaN, quantity: 1 }]],
+  ['an Infinity price', [{ price: Infinity, quantity: 1 }]],
+  ['a -Infinity price', [{ price: -Infinity, quantity: 1 }]],
   ['a bad line after a good one', [{ price: 100, quantity: 1 }, { price: 100, quantity: 0 }]],
 ];
 
