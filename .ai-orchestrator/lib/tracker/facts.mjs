@@ -127,7 +127,6 @@ export async function githubGuards(github, { item, needed, contract, mapping, ap
   const newest = async () => (await pullsOf(item.key))[0];
   const checks = (sha) => once(`checks ${sha}`, () => readChecks(github, sha));
   const reviews = (number) => once(`reviews ${number}`, () => github.getAll(`/pulls/${number}/reviews`));
-  const lastDecision = (list, login) => list.filter((r) => DECISIVE.includes(r.state) && (!login || r.user?.login === login)).at(-1)?.state;
   const intoBase = (pr) => checkBranch(pr.head.ref, { workType, base: pr.base.ref }).ok;
 
   const check = {
@@ -150,15 +149,13 @@ export async function githubGuards(github, { item, needed, contract, mapping, ap
     'changes-requested': async () => {
       const pr = await newest();
       if (!pr) return false;
-      // Only reviews of the newest commit: a push after a request for changes answers it.
-      const ofHead = (await reviews(pr.number)).filter(({ commit_id: sha }) => sha === pr.head.sha);
-      return lastDecision(ofHead) === 'CHANGES_REQUESTED' || (await checks(pr.head.sha)).failed;
+      return changesRequestedOn(await reviews(pr.number), pr.head.sha) || (await checks(pr.head.sha)).failed;
     },
     'merge-approved': async () => {
       const pr = await newest();
       if (!pr || approvers.length === 0) return false;
       const list = await reviews(pr.number);
-      return approvers.some((login) => lastDecision(list, login) === 'APPROVED');
+      return approvers.some((login) => lastDecision(list, login)?.state === 'APPROVED');
     },
     'pr-merged': async () => {
       const pr = await newest();
@@ -190,9 +187,21 @@ async function branchesOf(github, key) {
     .filter((name) => parseBranch(name)?.key === key);
 }
 
+// The latest review that decides (an approval, a request for changes, or one dismissed since), of anyone or of one
+// login. GitHub lists reviews oldest first.
+export function lastDecision(reviews, login) {
+  return reviews.filter((r) => DECISIVE.includes(r.state) && (!login || r.user?.login === login)).at(-1);
+}
+
+// The review half of changes-requested: the latest deciding review of commit `sha` asks for changes. Only reviews of
+// that commit count, so a push after a request for changes answers it. A failed check is the other half.
+export function changesRequestedOn(reviews, sha) {
+  return lastDecision(reviews.filter(({ commit_id: id }) => id === sha))?.state === 'CHANGES_REQUESTED';
+}
+
 // Green: at least one check, every check run finished and passed, and no commit status other than success. The check
 // run of jira-sync itself does not count.
-async function readChecks(github, sha) {
+export async function readChecks(github, sha) {
   const runs = (await github.getAll(`/commits/${sha}/check-runs`, {}, 'check_runs')).filter(({ name }) => name !== SYNC_CHECK);
   const status = await github.get(`/commits/${sha}/status`);
   const statusState = status.total_count > 0 ? status.state : null;

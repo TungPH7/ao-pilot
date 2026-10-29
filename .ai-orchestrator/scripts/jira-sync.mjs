@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readContract } from '../lib/contract.mjs';
+import { projectSettings, setting } from '../lib/project-settings.mjs';
 import { createGitHubClient, readGitHubToken } from '../lib/tracker/github-client.mjs';
 import { bearerAuth, createJiraClient } from '../lib/tracker/jira-client.mjs';
 import { readMapping } from '../lib/tracker/mapping.mjs';
@@ -51,19 +52,4 @@ try {
 } catch (error) {
   console.error(error.message);
   process.exitCode = 1;
-}
-
-// The env block of the project's .claude/settings.json, or nothing.
-function projectSettings(dir) {
-  try {
-    return JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8')).env ?? {};
-  } catch {
-    return {};
-  }
-}
-
-// An environment variable, else the project setting. A placeholder left from the kit, like <KEY>, counts as unset.
-function setting(name, settings) {
-  const value = process.env[name] || settings[name];
-  return value && !/^<.*>$/.test(value) ? value : undefined;
 }

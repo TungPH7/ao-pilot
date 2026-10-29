@@ -3,7 +3,7 @@
 // sent. `clientFor(kind)` gives a writing GitHub client for that App; tests pass a fake one.
 import { parseArgs } from 'node:util';
 import { checkBranch } from '../tracker/conventions.mjs';
-import { checkDescription, checkPullRequest, checkReviewHeader, checkTitle } from './pull-request.mjs';
+import { checkDescription, checkPullRequest, checkTitle, readReviewReport } from './pull-request.mjs';
 
 const USAGE = `usage:
   ao-pr.mjs create --base <branch> --title "<type(scope): subject (KEY)>" --body-file <file> [--head <branch>]
@@ -46,13 +46,14 @@ export async function runAoPr(argv, { gates, clientFor, readFile, currentBranch 
   if (command === 'review') {
     if (!['COMMENT', 'REQUEST_CHANGES'].includes(values.event)) throw new Error('--event is COMMENT or REQUEST_CHANGES: approving is for the human');
     if (body === undefined) throw usage();
-    const header = checkReviewHeader(body, gates.github_apps.review.roles);
-    if (!header.ok) throw refuse(header.problems);
+    // A report merge-gate cannot read would hold the PR back, so it is refused here.
+    const report = readReviewReport(body, gates.github_apps.review.roles);
+    if (!report.ok) throw refuse(report.problems);
     const github = await clientFor('review');
     // The review goes on the newest commit, the one merge-gate looks at.
     const { head } = await github.get(`/pulls/${number}`);
     await github.request('POST', `/pulls/${number}/reviews`, {}, { commit_id: head.sha, event: values.event, body });
-    return `posted the ${header.role} report (${values.event}) on #${number} at ${head.sha.slice(0, 7)}`;
+    return `posted the ${report.role} report (${values.event}) on #${number} at ${head.sha.slice(0, 7)}`;
   }
   throw usage();
 }

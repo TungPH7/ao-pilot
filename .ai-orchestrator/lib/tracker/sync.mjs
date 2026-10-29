@@ -64,14 +64,19 @@ export async function syncEvent({ event, payload, jira, github, contract, mappin
 export async function applyAction(action, { jira, mapping }) {
   if (action.transition) return jira.transition(action.key, action.name);
   if (action.effect !== FLAG) throw new Error(`jira-sync cannot make the effect ${action.effect}`);
-  const name = mapping.fields.flagged.jira_field;
-  const flagged = (await jira.get('/rest/api/3/field')).find((field) => field.name === name);
-  if (!flagged) throw new Error(`Jira has no field ${name}`);
-  await jira.editItem(action.key, { fields: { [flagged.id]: [{ value: FLAG_VALUE }] }, update: { labels: [{ add: mapping.needs_you_label }] } });
+  await raiseFlag(action.key, { jira, mapping });
   await jira.comment(
     action.key,
     `jira-sync: ${action.key} went back ${action.reworkCount} times, the limit in policies.yaml. It is flagged with the label ${mapping.needs_you_label} and waits for you.`,
   );
+}
+
+// The effect flag-needs-you without its comment: Jira's flag and the Needs you label. audit raises it too.
+export async function raiseFlag(key, { jira, mapping }) {
+  const name = mapping.fields.flagged.jira_field;
+  const flagged = (await jira.get('/rest/api/3/field')).find((field) => field.name === name);
+  if (!flagged) throw new Error(`Jira has no field ${name}`);
+  await jira.editItem(key, { fields: { [flagged.id]: [{ value: FLAG_VALUE }] }, update: { labels: [{ add: mapping.needs_you_label }] } });
 }
 
 export function describe({ key, transition, name, from, to, effect, reworkCount }) {

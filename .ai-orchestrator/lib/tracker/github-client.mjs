@@ -19,7 +19,9 @@ export function createGitHubClient({ repo, token, fetch = globalThis.fetch, writ
       url,
       body === undefined ? { method, headers } : { method, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
     );
-    if (!res.ok) throw new Error(`GitHub ${method} ${label} returned ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    if (!res.ok) {
+      throw Object.assign(new Error(`GitHub ${method} ${label} returned ${res.status}: ${(await res.text()).slice(0, 300)}`), { status: res.status });
+    }
     return res;
   }
 
@@ -61,6 +63,12 @@ export function readGitHubToken({ env = process.env, gh = runGh } = {}) {
   if (/^gh[opsu]_\w+$/.test(token)) return token;
   const { stdout, stderr } = gh(['auth', 'status', '--show-token']);
   return `${stdout}${stderr}`.match(/Token: (gh[opsu]_\w+)/)?.[1] ?? null;
+}
+
+// owner/name of the GitHub remote origin of the clone in `dir`; undefined when there is none.
+export function originRepo(dir) {
+  const url = spawnSync('git', ['-C', dir, 'remote', 'get-url', 'origin'], { encoding: 'utf8' }).stdout?.trim() ?? '';
+  return url.match(/github\.com[:/]([^/\s]+\/[^/\s]+?)(?:\.git)?$/)?.[1];
 }
 
 // stdout and stderr of a gh command whatever its exit code; both empty when gh is not installed.

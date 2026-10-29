@@ -1,6 +1,7 @@
 // Checks of the PR artifacts (quality-gates spec sections 2.2 and 2.5): the title and description of a PR against
-// templates/pull-request.md, and the head of a review report against templates/review-report.md. Pure. A project's kit
-// copy has no templates folder, so the sections and placeholders are listed here; a test keeps them equal to the template.
+// templates/pull-request.md, and a review report (its head and its findings) against templates/review-report.md. Pure.
+// A project's kit copy has no templates folder, so the sections, placeholders and severities are listed here; tests
+// keep them equal to the templates.
 import { checkPrTitle } from '../tracker/conventions.mjs';
 
 export const PR_SECTIONS = ['Jira', 'What Changed', 'How It Was Tested', 'Acceptance Criteria Coverage', 'Risks', 'Definition of Done'];
@@ -41,6 +42,33 @@ export function checkDescription(body) {
   for (const placeholder of PLACEHOLDERS.filter((p) => text.includes(p))) problems.push(`placeholder: ${placeholder} is still in the description`);
   if ('Example' in found) problems.push('Example: delete the Example section of the template');
   return problems;
+}
+
+export const SEVERITIES = ['Critical', 'High', 'Medium', 'Low'];
+// Findings that block the merge (templates/review-report.md).
+const BLOCKING = ['Critical', 'High'];
+const FINDING_COLUMNS = ['severity', 'axis', 'where', 'finding', 'fix'];
+
+// A review report as merge-gate reads it: the role of its Role line, the rows of its Findings table, and those that
+// block the merge. Text that is not a report has no role; a report merge-gate cannot read lists problems.
+export function readReviewReport(body, roles) {
+  const header = checkReviewHeader(body, roles);
+  if (!header.ok) return { ok: false, problems: header.problems };
+  const { found } = sections(body);
+  if (!('Findings' in found)) return { ok: false, role: header.role, problems: ['the report needs a "## Findings" section'] };
+  const findings = [];
+  const problems = [];
+  const rows = found.Findings.split('\n')
+    .filter((line) => line.trim().startsWith('|'))
+    .map((line) => line.trim().replace(/^\||\|$/g, '').split('|').map((cell) => cell.trim()))
+    // The header and separator rows.
+    .filter((cells) => cells[0].toLowerCase() !== 'severity' && !cells.every((cell) => /^:?-+:?$/.test(cell)));
+  rows.forEach((cells, index) => {
+    const severity = SEVERITIES.find((s) => s.toLowerCase() === cells[0].replace(/[*_`]/g, '').trim().toLowerCase());
+    if (severity) findings.push(Object.fromEntries(FINDING_COLUMNS.map((column, i) => [column, i === 0 ? severity : cells[i]])));
+    else problems.push(`finding ${index + 1}: severity '${cells[0]}' is not Critical, High, Medium or Low`);
+  });
+  return { ok: problems.length === 0, role: header.role, findings, blocking: findings.filter(({ severity }) => BLOCKING.includes(severity)), problems };
 }
 
 // The first heading and the Role line that tell merge-gate which role wrote a review report.
