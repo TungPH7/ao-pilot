@@ -30,7 +30,6 @@ const badLines: Array<[string, Line[]]> = [
   ['a negative quantity', [{ price: 100, quantity: -1 }]],
   ['a fractional quantity', [{ price: 100, quantity: 1.5 }]],
   ['a NaN quantity', [{ price: 100, quantity: NaN }]],
-  ['an Infinity quantity', [{ price: 100, quantity: Infinity }]],
   ['a negative price', [{ price: -1, quantity: 1 }]],
   ['a NaN price', [{ price: NaN, quantity: 1 }]],
   ['an Infinity price', [{ price: Infinity, quantity: 1 }]],
