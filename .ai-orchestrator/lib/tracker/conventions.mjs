@@ -15,6 +15,9 @@ const BASES = {
   hotfix: { test: (base) => base === 'main', text: 'main' },
 };
 
+// The kinds of work item branch, the prefixes before the Jira key.
+export const WORK_BRANCH_KINDS = Object.keys(BASES);
+
 export function extractKeys(text) {
   return [...new Set(text.match(KEYS) ?? [])];
 }

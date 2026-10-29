@@ -1,7 +1,11 @@
 {
   "env": {
     "AO_JIRA_SPACE": "DEMO",
-    "AO_APPROVERS": "TungPH7"
+    "AO_APPROVERS": "TungPH7",
+    "AO_DEV_APP": "tungph7-ao-dev",
+    "AO_DEV_APP_ID": "5514949",
+    "AO_REVIEW_APP": "tungph7-ao-review",
+    "AO_REVIEW_APP_ID": "5514961"
   },
   "hooks": {
     "PreToolUse": [
@@ -12,6 +16,10 @@
       {
         "matcher": "Bash|mcp__.*",
         "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/block-atlassian.mjs\"" }]
+      },
+      {
+        "matcher": "Bash|Read|Edit|Write|NotebookEdit",
+        "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/gh-guard.mjs\"" }]
       }
     ],
     "PostToolUse": [

@@ -1,0 +1,65 @@
+# Quality gates of a project (quality-gates spec sections 2.2–2.8). CI, merge-gate, audit, gh:protect and the hooks read
+# the project's copy in .ai-orchestrator/quality/. That copy is a protected path, and a PR that lowers a threshold here
+# turns the policy job red.
+
+# The jobs of kit/.github/workflows/ci.yml; merge-gate, audit and the ruleset require every one of them.
+checks: [policy, build-test, secrets, sast]
+
+# Coverage of the lines a PR adds or changes, read from the lcov files the project's test:coverage script writes. The
+# project's coverage must include every source file, even one no test imports yet. Config files and generated
+# migrations are left out (Checkpoint 1, 2026-10-29).
+coverage:
+  changed_lines_min: 80
+  lcov: ["coverage/lcov.info", "apps/*/coverage/lcov.info"]
+  source: ["**/*.{ts,tsx,js,jsx,mjs,cjs}"]
+  exclude: ["**/*.{test,spec}.*", "**/*.d.ts", "**/*.config.*", "**/migrations/**", "e2e/**", ".ai-orchestrator/**"]
+
+# npm audit fails on this level and above. An exception names a GitHub advisory, why it is accepted, and when it ends.
+dependencies:
+  audit_level: high
+  exceptions: []
+
+# Lines that switch a check off. A line that also carries the reason marker passes, so the reviewer can read why;
+# a `never` pattern fails even with a reason.
+suppressions:
+  reason_marker: "reason:"
+  patterns:
+    - "eslint-disable"
+    - "@ts-ignore"
+    - "@ts-nocheck"
+    - ".skip("
+    - "xit("
+    - "xdescribe("
+    - "istanbul ignore"
+    - "c8 ignore"
+    - "nosemgrep"
+    - "gitleaks:allow"
+    - "secretlint-disable"
+  never: [".only("]
+
+# Branches only a PR may change, and the merge method of each kind of work item branch.
+protected_branches: [develop, main, "release/*"]
+merge_method:
+  feature: squash
+  bugfix: squash
+  hotfix: squash
+
+# Files an agent may not edit, except the roles listed as editors. A PR of an agent that touches one is never merged by
+# merge-gate: you read the diff and merge it yourself.
+protected_paths:
+  - { path: ".github/workflows/**", editors: [devops] }
+  - { path: ".githooks/**" }
+  - { path: ".claude/**" }
+  - { path: ".ai-orchestrator/**" }
+
+# The GitHub Apps of the agents: the variables that name each App, the roles that use it, and the ao-pr.mjs commands
+# those roles may run with it.
+github_apps:
+  dev:
+    env: AO_DEV_APP
+    roles: [ba, sa, fe-dev, be-dev, devops]
+    commands: [create, edit, comment]
+  review:
+    env: AO_REVIEW_APP
+    roles: [reviewer, security]
+    commands: [review]
