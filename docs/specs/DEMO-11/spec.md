@@ -1,6 +1,6 @@
 # Spec: Mã giảm giá cho giỏ hàng
 
-> **Epic:** DEMO-11 · **Jira:** https://phunghuutung12b4.atlassian.net/browse/DEMO-11 · **Status:** Draft
+> **Epic:** DEMO-11 · **Jira:** https://phunghuutung12b4.atlassian.net/browse/DEMO-11 · **Status:** Approved 2026-10-31
 
 ## Objective
 
