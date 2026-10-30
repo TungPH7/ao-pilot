@@ -232,3 +232,52 @@ test('a POST / from the page of this server, by either of its names, is answered
     assert.match(reply.body, /<h1>Giỏ hàng<\/h1>/);
   }
 });
+
+// AC10: a coupon is a few dozen bytes, so a body over 1.024 bytes is refused, and the connection is closed rather than
+// read to its end.
+test('a POST / body over 1.024 bytes with a Content-Length is 413 at once, on a closed connection, and the server still answers', async (t) => {
+  const url = await start(t);
+  for (const size of [1025, 2000]) {
+    const body = 'code='.padEnd(size, 'A');
+    const reply = await raw(url, { method: 'POST', headers: [...own(url), 'Content-Length', String(size)], body });
+    assert.equal(reply.status, 413, `${size} bytes`);
+    assert.equal(reply.headers.connection, 'close');
+    assert.equal(reply.headers['content-type'], 'text/plain; charset=utf-8');
+    assert.equal(reply.headers['x-content-type-options'], 'nosniff');
+    assert.equal(reply.body, 'Payload too large');
+    assert.equal((await send(`${url}/`)).status, 200, `GET / after ${size} bytes`);
+  }
+});
+
+test('a POST / body over 1.024 bytes without a Content-Length is 413 as it is read, and the server still answers', async (t) => {
+  const url = await start(t);
+  for (const size of [1025, 5000]) {
+    const reply = await raw(url, { method: 'POST', headers: own(url), body: 'code='.padEnd(size, 'A') });
+    assert.equal(reply.status, 413, `${size} bytes, chunked`);
+    assert.equal(reply.headers.connection, 'close');
+    assert.equal(reply.body, 'Payload too large');
+    assert.equal((await send(`${url}/`)).status, 200, `GET / after ${size} bytes`);
+  }
+});
+
+test('a POST / body of exactly 1.024 bytes is read, with or without a Content-Length', async (t) => {
+  const url = await start(t);
+  const body = 'code=GIAM10&pad='.padEnd(1024, 'A');
+  assert.equal((await raw(url, { method: 'POST', headers: [...own(url), 'Content-Length', '1024'], body })).status, 200);
+  assert.equal((await raw(url, { method: 'POST', headers: own(url), body })).status, 200);
+});
+
+test('a client that drops the connection in the middle of the body ends only its own request', async (t) => {
+  const url = await start(t);
+  const { hostname, port, host } = new URL(url);
+  await new Promise<void>((resolve, reject) => {
+    const socket = connect({ host: hostname, port: Number(port) }, () => {
+      socket.write(`POST / HTTP/1.1\r\nHost: ${host}\r\nOrigin: ${url}\r\nContent-Length: 500\r\n\r\ncode=GIA`, () => socket.destroy());
+    });
+    socket.on('close', () => resolve());
+    socket.on('error', reject);
+  });
+  // Gives the server a moment to see the connection go before the next request.
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal((await send(`${url}/`)).status, 200);
+});

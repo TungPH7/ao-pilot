@@ -47,10 +47,40 @@ export function cartServer(items: CartItem[] = SAMPLE_CART): Server {
       // Two Origin headers reach here joined by a comma, so they are not equal either (AC9).
       response.writeHead(403, TEXT_HEADERS).end('Forbidden');
     } else {
-      response.writeHead(200, PAGE_HEADERS).end(page);
+      readBody(
+        request,
+        () => response.writeHead(200, PAGE_HEADERS).end(page),
+        // Connection: close lets Node drop the rest of the body instead of reading it to keep the connection (AC10).
+        () => response.writeHead(413, { ...TEXT_HEADERS, Connection: 'close' }).end('Payload too large'),
+      );
     }
   });
   return server;
+}
+
+const BODY_LIMIT = 1024; // bytes of a POST / body
+
+// Calls done with the body, or tooLarge once the body passes BODY_LIMIT bytes, keeping no more than that. A
+// Content-Length over the limit is refused before any byte is read. Reads with data and end events, not for await,
+// so a client that drops the connection mid-body ends only its own request: the request emits no error without a
+// listener, and end never comes.
+function readBody(request: IncomingMessage, done: (body: string) => void, tooLarge: () => void): void {
+  if (Number(request.headers['content-length'] ?? 0) > BODY_LIMIT) return tooLarge();
+  const chunks: Buffer[] = [];
+  let size = 0;
+  request.on('data', (chunk: Buffer) => {
+    if (size > BODY_LIMIT) return;
+    size += chunk.length;
+    if (size > BODY_LIMIT) {
+      chunks.length = 0;
+      tooLarge();
+    } else {
+      chunks.push(chunk);
+    }
+  });
+  request.on('end', () => {
+    if (size <= BODY_LIMIT) done(Buffer.concat(chunks).toString('utf8'));
+  });
 }
 
 // npm run serve: only on this machine, on PORT or 3000. import.meta.main needs Node 24.2 (package.json engines).
