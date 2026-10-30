@@ -1,7 +1,7 @@
 import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { request } from 'node:http';
-import type { AddressInfo } from 'node:net';
+import { request, type IncomingHttpHeaders } from 'node:http';
+import { connect, type AddressInfo } from 'node:net';
 import { cartServer, SAMPLE_CART } from './server.ts';
 
 const POLICY = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
@@ -36,6 +36,44 @@ function rawGet(url: string, target: string): Promise<number | undefined> {
     })
       .on('error', reject)
       .end();
+  });
+}
+
+interface Reply {
+  status: number | undefined;
+  headers: IncomingHttpHeaders;
+  body: string;
+}
+
+// A request through node:http with exactly the headers given, as a flat list like rawHeaders, so a name can repeat and
+// the client adds no Host of its own. fetch cannot do this: it drops a Host it is given (ADR-0001). A body goes with
+// the Content-Length of the headers, or chunked when they have none.
+function raw(url: string, options: { method?: string; path?: string; headers?: string[]; body?: string } = {}): Promise<Reply> {
+  const { method = 'GET', path = '/', headers = [], body } = options;
+  return new Promise((resolve, reject) => {
+    const { hostname, port } = new URL(url);
+    const sent = request({ hostname, port, method, path, headers, setHost: false, signal: AbortSignal.timeout(TIMEOUT) }, (response) => {
+      const chunks: Buffer[] = [];
+      response.on('data', (chunk: Buffer) => chunks.push(chunk));
+      response.on('end', () => resolve({ status: response.statusCode, headers: response.headers, body: Buffer.concat(chunks).toString('utf8') }));
+    });
+    sent.on('error', reject);
+    if (body !== undefined) sent.write(body);
+    sent.end();
+  });
+}
+
+// Bytes written as they are through node:net, for what node:http cannot send, such as HTTP/1.0. Resolves with the whole
+// answer once the server closes the connection.
+function wire(url: string, text: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const { hostname, port } = new URL(url);
+    const chunks: Buffer[] = [];
+    const socket = connect({ host: hostname, port: Number(port) }, () => socket.write(text));
+    socket.setTimeout(TIMEOUT, () => socket.destroy(new Error(`no answer in ${TIMEOUT} ms`)));
+    socket.on('data', (chunk: Buffer) => chunks.push(chunk));
+    socket.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    socket.on('error', reject);
   });
 }
 
@@ -96,4 +134,57 @@ test('a path that only looks like / is 404, and the server keeps answering', asy
 
 test('a cart the page cannot show stops the server from being made, not a request', () => {
   assert.throws(() => cartServer([{ name: 'Bút bi', price: -1, quantity: 1 }]), RangeError);
+});
+
+// AC11: the server answers only the names it is reached by on this machine, so a page that rebinds its own name to
+// 127.0.0.1 cannot read it. The Host is checked before anything else, and compared as is.
+test('a Host that is not this server is 400 Bad request, for GET and POST and before the path is looked at', async (t) => {
+  const url = await start(t);
+  const { port } = new URL(url);
+  for (const host of ['evil.example', `evil.example:${port}`, '127.0.0.1', `127.0.0.1:${Number(port) + 1}`, `LOCALHOST:${port}`, `127.0.0.1:${port}.evil.example`]) {
+    for (const [method, path] of [['GET', '/'], ['POST', '/'], ['GET', '/admin'], ['PUT', '/']]) {
+      const reply = await raw(url, { method, path, headers: ['Host', host, 'Origin', `http://${host}`], body: method === 'POST' ? 'code=GIAM10' : undefined });
+      assert.equal(reply.status, 400, `${method} ${path} with Host ${host}`);
+      assert.equal(reply.headers['content-type'], 'text/plain; charset=utf-8');
+      assert.equal(reply.headers['x-content-type-options'], 'nosniff');
+      assert.equal(reply.body, 'Bad request');
+    }
+  }
+});
+
+test('localhost with the port of this server is this server', async (t) => {
+  const url = await start(t);
+  const reply = await raw(url, { headers: ['Host', `localhost:${new URL(url).port}`] });
+  assert.equal(reply.status, 200);
+  assert.match(reply.body, /<h1>Giỏ hàng<\/h1>/);
+});
+
+test('an HTTP/1.1 request without a Host is 400 Bad request from the server, as text', async (t) => {
+  const url = await start(t);
+  const reply = await raw(url);
+  assert.equal(reply.status, 400);
+  assert.equal(reply.headers['content-type'], 'text/plain; charset=utf-8');
+  assert.equal(reply.headers['x-content-type-options'], 'nosniff');
+  assert.equal(reply.body, 'Bad request');
+});
+
+test('an HTTP/1.0 request without a Host is 400 Bad request, even on a path that does not exist', async (t) => {
+  const url = await start(t);
+  for (const path of ['/', '/admin']) {
+    const answer = await wire(url, `GET ${path} HTTP/1.0\r\n\r\n`);
+    assert.match(answer, /^HTTP\/1\.1 400 /, path);
+    assert.match(answer, /\r\nContent-Type: text\/plain; charset=utf-8\r\n/i);
+    assert.match(answer, /\r\nX-Content-Type-Options: nosniff\r\n/i);
+    assert.ok(answer.endsWith('\r\n\r\nBad request'), path);
+  }
+});
+
+test('two Host headers are 400, even when both name this server', async (t) => {
+  const url = await start(t);
+  const host = new URL(url).host;
+  for (const second of [host, 'evil.example']) {
+    const reply = await raw(url, { headers: ['Host', host, 'Host', second] });
+    assert.equal(reply.status, 400, `second Host ${second}`);
+    assert.equal(reply.body, 'Bad request');
+  }
 });
