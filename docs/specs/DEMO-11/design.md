@@ -168,14 +168,3 @@ Bố cục theo cỡ màn hình:
 ## Open Questions
 
 Không còn câu hỏi mở. Các câu Q1–Q10 của bản trước được trả lời ngày 2026-10-31, thay người duyệt. Các câu trả lời đã thành quyết định ở mục Screens (user story 3 và body của 400, 403, 413), trong YAML của các khối [2] đến [5] và [7], và trong mục Bố cục theo cỡ màn hình của S1.
-
-- **Q1. User story 3 (AC9–AC11) không có màn hình.** Các câu 400, 403 và 413 là `text/plain`, như 404 và 405 hiện có, không thuộc S1. Body của 404 và 405 hiện là "Not found" và "Method not allowed" (đọc từ `src/server.ts`). Đề xuất: body 400, 403 và 413 cũng là tiếng Anh ngắn, như "Bad request", "Forbidden", "Payload too large"; `sa` chốt trong plan.
-- **Q2. Sau khi áp mã đúng, ô [3] trống hay giữ mã?** Đề xuất: trống; mã đang áp hiện ở [7] và đi kèm form qua trường ẩn.
-- **Q3. Có thông báo thành công không?** Đề xuất: không. SPEC chỉ chốt ba câu chữ và coi đổi câu chữ là "Ask first"; dòng [7] cho thấy mã đã áp. [Inference] Người dùng trình đọc màn hình chỉ biết mã đã áp khi đọc tới [7]; chưa kiểm với trình đọc màn hình.
-- **Q4. Tiêu điểm khi có lỗi.** Đề xuất: thuộc tính `autofocus` trên [3], chỉ khi [5] hiện, cùng `aria-invalid` và `aria-describedby`. [Unverified] Tôi chưa kiểm `autofocus` với CSP của trang (`default-src 'none'`) trên Chrome, và chưa kiểm cách trình đọc màn hình đọc [5]. `fe-dev` kiểm; nếu `autofocus` không chạy thì bỏ nó và giữ phần ARIA.
-- **Q5. Câu chữ ngoài ba câu SPEC đã chốt.** "Mã giảm giá" (nhãn [3]) và "Giảm giá (<mã>)" (nhãn [7]) là câu chữ của design, không phải của SPEC. Đề xuất: giữ; đổi câu chữ cần người duyệt.
-- **Q6. `data-testid` mới.** Đề xuất `discount` (giá trị của [7]) và `coupon-error` ([5]); tìm ô [3] bằng nhãn và nút [4] bằng role button với tên "Áp dụng". `sa` chốt trong plan, cùng tên trường của form.
-- **Q7. Giới hạn độ dài của ô [3].** Body của `POST /` quá 1.024 byte nhận 413 dạng chữ thô, không phải trang giỏ hàng. Đề xuất: thêm `maxlength="64"` vào [3] để người mua bình thường không chạm giới hạn đó. SPEC chưa nói tới `maxlength`; cần người duyệt đồng ý.
-- **Q8. Câu trả lời của `POST /`.** Đề xuất: server trả thẳng trang 200, không chuyển hướng, vì server không lưu trạng thái. [Inference] Tải lại trình duyệt khi đó gửi lại form (trình duyệt có thể hỏi xác nhận). SPEC để "giữ mã đã áp khi tải lại trang" ngoài phạm vi.
-- **Q9. Bố cục thật chưa kiểm.** Chưa có code, nên chưa kiểm ở 320, 768, 1024 và 1440 px. [Unverified] Bảng [2] bốn cột ở 320 px chưa kiểm có tràn ngang không; DEMO-10 làm bảng này và Epic không đổi nó. `fe-dev` và `qa` kiểm bốn cỡ; nếu bảng tràn, tách một Task riêng.
-- **Q10. Không có màn hình hay trạng thái cho các trường hợp sau**, vì SPEC để ngoài phạm vi: nút bỏ mã, hạn dùng, điều kiện đơn tối thiểu, số lượt dùng.
