@@ -336,3 +336,33 @@ test('the page of POST / has the headers of GET /, and no Referrer-Policy that w
     assert.doesNotMatch(await response.text(), /<meta[^>]+referrer/i);
   }
 });
+
+// The text of an element of a page, by its data-testid, as shown.
+const shown = (html: string, testid: string): string | undefined => html.match(new RegExp(`data-testid="${testid}">([^<]*)<`))?.[1];
+
+test('POST / with a code of the list answers the page with its discount line and the coupon in the hidden field', async (t) => {
+  const url = await start(t);
+  const html = await (await post(url, 'code=++giam10++')).text();
+  assert.match(html, /<dt>Giảm giá \(GIAM10\)<\/dt>/);
+  assert.equal(shown(html, 'discount'), '-3.900\u00a0₫');
+  assert.match(html, /<input type="hidden" name="applied" value="GIAM10">/);
+  assert.equal(shown(html, 'coupon-error'), undefined);
+  const replaced = await (await post(url, 'code=GIAM20K&applied=GIAM10')).text();
+  assert.equal(replaced.match(/data-testid="discount"/g)?.length, 1);
+  assert.equal(shown(replaced, 'discount'), '-20.000\u00a0₫');
+});
+
+test('POST / with a code that is refused answers the page with its message, the code typed and the coupon in force', async (t) => {
+  const url = await start(t);
+  const invalid = await (await post(url, 'code=SAIMA&applied=GIAM10')).text();
+  assert.equal(shown(invalid, 'coupon-error'), 'Mã giảm giá không hợp lệ.');
+  assert.match(invalid, /name="code" maxlength="64" value="SAIMA" autofocus aria-invalid="true" aria-describedby="coupon-error">/);
+  assert.equal(shown(invalid, 'discount'), '-3.900\u00a0₫');
+  const empty = await (await post(url, 'code=')).text();
+  assert.equal(shown(empty, 'coupon-error'), 'Vui lòng nhập mã giảm giá.');
+  assert.equal(shown(empty, 'discount'), undefined);
+  const markup = await (await post(url, `code=${encodeURIComponent('"><b>x</b>')}`)).text();
+  assert.equal(shown(markup, 'coupon-error'), 'Mã giảm giá không hợp lệ.');
+  assert.match(markup, /value="&#34;&#62;&#60;b&#62;x&#60;\/b&#62;"/);
+  assert.doesNotMatch(markup, /<b>/);
+});
