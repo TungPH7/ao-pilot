@@ -106,15 +106,67 @@ Các yêu cầu sau không phải user story. Plan đưa chúng vào Story Jira 
 - Từ review PR #9 (reviewer, Low): mọi request trong `src/server.test.ts` có timeout, như `AbortSignal.timeout` cho `fetch` và một timeout cho `rawGet`. Khi server sập, test phải fail chứ không treo.
 - Từ review PR #9 (reviewer, Low): `package-lock.json` ghi `engines.node` là `">=24.2"`, khớp `package.json`. Lệnh sửa: `npm install --package-lock-only`.
 
+### Non-functional requirements
+
+`sa` thêm mục này ngày 2026-10-31. Mọi hành vi của Node nêu dưới đây, tôi đã chạy thử trên Node 24.17.0 ở máy dev cùng ngày. Chỗ nào chưa kiểm thì có nhãn.
+
+#### Performance
+
+- Mỗi request xử lý hoàn toàn trong bộ nhớ: không đọc file, không gọi mạng, không cơ sở dữ liệu. Tra mã là tra một hằng số trong `src/coupon.ts`.
+- `GET /` và `HEAD /` vẫn trả trang dựng một lần khi tạo server, như `cartServer` hôm nay. Chỉ `POST /` dựng trang ở mỗi request, vì trang phụ thuộc mã.
+- Body của `POST /`, sau bước kiểm `Origin`:
+  - `Content-Length` lớn hơn 1.024 thì server trả 413 ngay, không đọc body.
+  - Không có `Content-Length` thì server ngừng gom body ở byte thứ 1.025 và trả 413.
+  - Server không giữ quá 1.024 byte body trong bộ nhớ cho một request. Plan chốt cách đóng kết nối sau 413.
+- Header của request giữ giới hạn mặc định của Node: 16.384 byte (`http.maxHeaderSize`).
+- Thời hạn request giữ mặc định của Node 24: `requestTimeout` 300.000 ms, `headersTimeout` 60.000 ms, `keepAliveTimeout` 5.000 ms. Lý do: server chỉ nghe `127.0.0.1`, và Epic không đổi địa chỉ đó. [Inference] Một tiến trình trên cùng máy có thể giữ kết nối mở lâu, nhưng tiến trình đó vốn đã làm được nhiều việc hơn trên máy.
+- Không đặt mục tiêu độ trễ bằng số. [Inference] Trang chỉ chạy trên máy dev và trong test, không có lưu lượng thật. Thay vào đó, mỗi request trong `src/server.test.ts` có timeout 5.000 ms: request chậm hơn làm test fail.
+
+#### Security
+
+Bổ sung cho mục Technical requirements và mục Boundaries:
+
+- Một request không làm sập server:
+  - Client ngắt kết nối giữa body chỉ kết thúc request đó. Trên Node 24.17.0, một handler `async` đọc body bằng `for await` mà không bắt lỗi làm cả tiến trình thoát với `Error: aborted` (`ECONNRESET`) khi client ngắt giữa body. Đọc bằng sự kiện `data` và `end` thì server vẫn trả lời request sau.
+  - Body form được đọc bằng `URLSearchParams`, không dùng `decodeURIComponent`. Trên Node 24.17.0, `URLSearchParams` đổi `%FF` và `%E0%A4%A` thành ký tự U+FFFD mà không ném lỗi, còn `decodeURIComponent('%E0%A4%A')` ném `URIError`. Body mã hóa sai chỉ là mã không hợp lệ.
+  - Response không chứa stack trace hay thông điệp lỗi nội bộ.
+- `Host`:
+  - Port hợp lệ là port server thật sự nghe, kể cả khi `listen(0)` chọn port, như trong `src/server.test.ts`.
+  - So sánh nguyên chuỗi với `127.0.0.1:<port>` và `localhost:<port>`, không chuẩn hóa.
+  - Request có hơn một header `Host` nhận 400. Node 24.17.0 giữ `Host` đầu tiên và bỏ các `Host` sau, nên `request.headers.host` không đủ để phát hiện; `request.rawHeaders` cho biết số header `Host`. [Unverified] RFC 9112 mục 3.2 đòi 400 cho trường hợp này; tôi trích từ trí nhớ, chưa mở RFC.
+  - Request HTTP/1.1 không có `Host`: xem Q8.
+- `Origin` được so sánh nguyên chuỗi. Với hai header `Origin`, Node 24.17.0 nối chúng thành một chuỗi như `"http://127.0.0.1:<port>, http://evil.example"`. Chuỗi đó không trùng, nên request nhận 403 mà không cần code riêng; integration test giữ trường hợp này.
+- Response 200 của `POST /` có cùng header với `GET /`: `Content-Type: text/html; charset=utf-8`, CSP và `X-Content-Type-Options: nosniff`.
+- Danh sách mã không phải bí mật: nó nằm trong code và trong README. Vì vậy Epic không giới hạn tần suất request và không cần so sánh mã trong thời gian hằng. [Inference] Epic không có thanh toán, nên đoán được mã không mang lại tiền.
+
+#### Data and retention
+
+- Dữ liệu Epic xử lý: mã người dùng gõ ở ô [3] của S1, mã đang áp trong trường ẩn, và các header `Host`, `Origin`, `Content-Length` của request.
+- Không có dữ liệu cá nhân theo thiết kế: không đăng nhập, không tên, không địa chỉ, không thanh toán. [Inference] Người mua vẫn gõ được bất kỳ chuỗi nào vào ô mã, kể cả dữ liệu cá nhân. Vì vậy mã được xử lý như dữ liệu không tin cậy và không bị ghi lại.
+- Lưu ở server: không có. Không cookie, không session, không file, không cơ sở dữ liệu. Mã chỉ nằm trong bộ nhớ trong thời gian của một request, và trong HTML trả về.
+- Thời gian lưu ở server: 0. Ở phía trình duyệt, trang trả về của `POST /` nằm trong lịch sử của trình duyệt như mọi trang; Epic không điều khiển phần này.
+- Log: hôm nay server chỉ log một dòng khi khởi động (`Cart page on http://127.0.0.1:<port>/`). Epic không thêm log theo request. Khi cần log một lỗi, log chỉ ghi loại lỗi, không ghi mã, body hay giá trị header.
+- Danh sách mã là hằng số trong `src/coupon.ts`; lịch sử của nó là lịch sử Git. Thêm, bớt hay đổi mã thuộc mục Ask first.
+- Dữ liệu test chỉ gồm mã mẫu (`GIAM10`, `GIAM20K`, `SAIMA`, `"><b>x</b>`). Trace của Playwright (`trace: 'retain-on-failure'` trong `playwright.config.ts`) nằm ở `test-results/`, đã có trong `.gitignore`, nên không bị commit.
+
 ## Tech Stack
 
-Không thêm dependency. Epic dùng những gì đã có trong `package.json`:
+Epic không thêm dependency, không đổi phiên bản nào, và không đổi cách dựng trang: HTML dựng ở server bằng `node:http`, không framework, không script phía client. Phiên bản hiện có nằm trong `package.json` (Node `>=24.2`, TypeScript 6.0.3, `@playwright/test` 1.64.1, `@types/node` 24.19.2); các lệnh nằm trong README.
 
-- Node `>=24.2`, TypeScript 6.0.3;
-- `node:http` cho server, `node:test` cho unit và integration test;
-- `@playwright/test` 1.64.1, chạy với Chrome cài trên máy.
+Thay đổi:
 
-Trang vẫn dựng ở server, không framework, không script phía client.
+| Mục | Trước | Sau | Lý do |
+|---|---|---|---|
+| `package-lock.json`, `packages[""].engines.node` | `">=24"` | `">=24.2"` | Khớp `package.json`; finding Low của reviewer trên PR #9 |
+
+API có sẵn của Node mà Epic dùng lần đầu, không phải dependency mới. Tôi đã chạy từng API trên Node 24.17.0 ngày 2026-10-31:
+
+| API | Dùng cho |
+|---|---|
+| `URLSearchParams` | Đọc body `application/x-www-form-urlencoded` của `POST /` |
+| `request.rawHeaders` | Đếm số header `Host` của request |
+| `http.createServer({ requireHostHeader: false })` | Cho handler tự trả 400 khi request HTTP/1.1 không có `Host`, nếu Q8 được duyệt |
+| `AbortSignal.timeout()` | Timeout của `fetch` trong `src/server.test.ts` |
 
 ## Commands
 
@@ -193,6 +245,12 @@ Mọi Sub-task viết theo TDD: test đỏ trước, code sau.
 - Body quá 1.024 byte, có và không có `Content-Length` → 413, và server vẫn trả lời request sau.
 - `PUT /` → 405 với `Allow: GET, HEAD, POST`.
 - Trang trả về không có header `Referrer-Policy: no-referrer`.
+- Các trường hợp của mục Non-functional requirements:
+  - client ngắt giữa body, rồi server vẫn trả 200 cho `GET /`;
+  - body mã hóa sai, như `code=%FF`, nhận 200 với "Mã giảm giá không hợp lệ.";
+  - hai header `Host` → 400; hai header `Origin` → 403;
+  - response 200 của `POST /` có cùng header với `GET /`;
+  - request HTTP/1.1 không có `Host`, theo câu trả lời của Q8.
 
 **E2E test** (`e2e/coupon.spec.ts`, Playwright với Chrome): mỗi AC từ AC1 đến AC11 có một test, tên bắt đầu bằng mã AC.
 
@@ -244,4 +302,11 @@ Các điều kiện sau cộng thêm vào Epic DoD. Repo chưa có `docs/sdlc.md
 
 ## Open Questions
 
-Không còn câu hỏi mở. Các câu Q1–Q7 của bản trước được trả lời ngày 2026-10-31, thay người duyệt. Các câu trả lời đã thành quyết định trong các mục Scope, Business rules, User stories, Technical requirements, Testing Strategy và Boundaries.
+Các câu Q1–Q7 của bản trước được trả lời ngày 2026-10-31, thay người duyệt. Các câu trả lời đã thành quyết định trong các mục Scope, Business rules, User stories, Technical requirements, Testing Strategy và Boundaries.
+
+Câu hỏi của `sa`, cần bạn trả lời trước gate ① spec-approval:
+
+- **Q8.** Request HTTP/1.1 không có `Host` nhận câu trả lời 400 ở dạng nào?
+  - Bối cảnh: trên Node 24.17.0, Node tự trả 400 cho request này trước khi gọi handler. Câu trả lời đó không có `Content-Type`, không có `X-Content-Type-Options: nosniff`, và body rỗng. Nó vẫn đạt AC11, nhưng trái với mục Technical requirements: câu trả lời 400 là `text/plain; charset=utf-8`, có `nosniff` và body cố định.
+  - Đề xuất: tạo server với `createServer({ requireHostHeader: false })`, để handler tự trả 400 "Bad request" như với mọi `Host` sai. Tôi đã chạy thử trên Node 24.17.0: với tùy chọn này, handler nhận request và `request.headers.host` là `undefined`. `@types/node` 24.19.2 có khai báo tùy chọn này.
+  - Cách khác: giữ câu trả lời 400 của Node cho riêng trường hợp này, và SPEC ghi đây là ngoại lệ của mục Technical requirements.
