@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { applyCoupon } from './coupon.ts';
 import { renderCart, type CartItem } from './page.ts';
 
 // The cart the page shows until the cart has a store: two lines, a subtotal of 39.000 ₫, so shipping is charged.
@@ -25,10 +26,12 @@ function ownHost(request: IncomingMessage, port: number): string | undefined {
   return count === 1 && (host === `127.0.0.1:${port}` || host === `localhost:${port}`) ? host : undefined;
 }
 
-// The cart page at / for GET and HEAD. A request that does not name this server in its Host is 400, before anything
-// else. Any other path is 404, any other method 405. The path is the request target up to its query string, read as
-// is: `//` or `//host/` is not /. The page is made once, so a cart it cannot show (total() throws a RangeError) fails
-// here and not on a request.
+// The cart page at /: GET and HEAD answer the page made once, POST / the page with the coupon of its form. The
+// checks run in the order of the plan: a Host that does not name this server is 400, before anything else (AC11);
+// another path is 404; another method 405; a POST without the Origin of this server 403, before its body is read
+// (AC9); a body over BODY_LIMIT bytes 413 (AC10). The path is the request target up to its query string, read as is:
+// `//` or `//host/` is not /. A cart the page cannot show (total() throws a RangeError) fails here and not on a
+// request, and discount() does not throw on a subtotal that total() returned.
 export function cartServer(items: CartItem[] = SAMPLE_CART): Server {
   const page = renderCart(items);
   // requireHostHeader: false lets the server answer an HTTP/1.1 request without a Host with its own 400, as text.
@@ -49,7 +52,12 @@ export function cartServer(items: CartItem[] = SAMPLE_CART): Server {
     } else {
       readBody(
         request,
-        () => response.writeHead(200, PAGE_HEADERS).end(page),
+        (body) => {
+          // Any Content-Type is read as a form; bytes that are not UTF-8 become U+FFFD, an unknown code (plan, POST /).
+          const form = new URLSearchParams(body);
+          const coupon = applyCoupon({ code: form.get('code') ?? '', applied: form.get('applied') ?? '' });
+          response.writeHead(200, PAGE_HEADERS).end(renderCart(items, coupon));
+        },
         // Connection: close lets Node drop the rest of the body instead of reading it to keep the connection (AC10).
         () => response.writeHead(413, { ...TEXT_HEADERS, Connection: 'close' }).end('Payload too large'),
       );

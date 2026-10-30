@@ -281,3 +281,58 @@ test('a client that drops the connection in the middle of the body ends only its
   await new Promise((resolve) => setTimeout(resolve, 50));
   assert.equal((await send(`${url}/`)).status, 200);
 });
+
+// A POST / of a form body as the page sends it. fetch sends no Origin of its own, so it is set here (ADR-0001).
+function post(url: string, body: string, contentType = 'application/x-www-form-urlencoded'): Promise<Response> {
+  return send(`${url}/`, { method: 'POST', headers: { Origin: url, 'Content-Type': contentType }, body });
+}
+
+// The total of a page, as shown.
+const totalOf = (html: string): string | undefined => html.match(/<dd data-testid="total">([^<]*)<\/dd>/)?.[1];
+
+test('POST / with a code of the list answers the page with the discount taken off the total', async (t) => {
+  const url = await start(t);
+  assert.equal(totalOf(await (await post(url, 'code=GIAM10')).text()), '38.100\u00a0₫');
+  assert.equal(totalOf(await (await post(url, 'code=++giam10++')).text()), '38.100\u00a0₫', 'trimmed and upper-cased');
+  assert.equal(totalOf(await (await post(url, 'code=GIAM20K')).text()), '22.000\u00a0₫');
+  assert.equal(totalOf(await (await post(url, 'code=GIAM20K&applied=GIAM10')).text()), '22.000\u00a0₫', 'replaces the coupon applied before');
+});
+
+test('POST / with a code that is refused keeps the total of the coupon applied before, or of none', async (t) => {
+  const url = await start(t);
+  for (const body of ['code=SAIMA', 'code=', '', 'code=%FF', 'code=%E0%A4%A', 'code=SAIMA&applied=GIAM99', `code=${'A'.repeat(65)}`]) {
+    const response = await post(url, body);
+    assert.equal(response.status, 200, body);
+    assert.equal(totalOf(await response.text()), '42.000\u00a0₫', body);
+  }
+  assert.equal(totalOf(await (await post(url, 'code=SAIMA&applied=GIAM10')).text()), '38.100\u00a0₫');
+  assert.equal(totalOf(await (await post(url, 'code=&applied=GIAM10')).text()), '38.100\u00a0₫');
+});
+
+test('POST / takes no amount from the form, only the first value of a field, and not the query string', async (t) => {
+  const url = await start(t);
+  assert.equal(totalOf(await (await post(url, 'code=SAIMA&total=1&discount=99999&percent=100')).text()), '42.000\u00a0₫');
+  assert.equal(totalOf(await (await post(url, 'code=SAIMA&code=GIAM10')).text()), '42.000\u00a0₫');
+  const queried = await send(`${url}/?code=GIAM10`, { method: 'POST', headers: { Origin: url }, body: 'code=' });
+  assert.equal(totalOf(await queried.text()), '42.000\u00a0₫');
+});
+
+test('POST / reads the body as a form whatever its Content-Type', async (t) => {
+  const url = await start(t);
+  assert.equal(totalOf(await (await post(url, 'code=GIAM10', 'text/plain')).text()), '38.100\u00a0₫');
+});
+
+test('the page of POST / has the headers of GET /, and no Referrer-Policy that would make Chrome send Origin: null', async (t) => {
+  const url = await start(t);
+  const got = await send(`${url}/`);
+  const posted = await post(url, 'code=GIAM10');
+  assert.equal(posted.status, 200);
+  for (const name of ['content-type', 'content-security-policy', 'x-content-type-options']) {
+    assert.equal(posted.headers.get(name), got.headers.get(name), name);
+  }
+  for (const response of [got, posted]) {
+    assert.equal(response.headers.get('referrer-policy'), null);
+    assert.equal(response.headers.get('set-cookie'), null);
+    assert.doesNotMatch(await response.text(), /<meta[^>]+referrer/i);
+  }
+});
