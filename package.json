@@ -5,7 +5,7 @@
   "description": "Sandbox of ai-orchestrator: a small TypeScript package for the quality-gates live test, until Pilot 1 brings Next.js and NestJS",
   "type": "module",
   "engines": {
-    "node": ">=24"
+    "node": ">=24.2"
   },
   "scripts": {
     "prepare": "node .ai-orchestrator/scripts/install-hooks.mjs",

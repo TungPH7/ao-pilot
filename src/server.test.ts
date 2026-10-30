@@ -1,14 +1,30 @@
-import { test } from 'node:test';
+import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
+import { request } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { cartServer, SAMPLE_CART } from './server.ts';
 
+const POLICY = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+
 // Starts the server on a free port of 127.0.0.1 and stops it after the test.
-async function start(t: { after: (fn: () => void) => void }) {
+async function start(t: TestContext) {
   const server = cartServer();
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => server.close());
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+}
+
+// A GET with the request target written as is, such as an absolute URL, which fetch would not send.
+function rawGet(url: string, target: string): Promise<number | undefined> {
+  return new Promise((resolve, reject) => {
+    const { hostname, port } = new URL(url);
+    request({ hostname, port, path: target }, (response) => {
+      response.resume();
+      resolve(response.statusCode);
+    })
+      .on('error', reject)
+      .end();
+  });
 }
 
 test('the sample cart has two lines with a subtotal under the free shipping threshold', () => {
@@ -16,13 +32,13 @@ test('the sample cart has two lines with a subtotal under the free shipping thre
   assert.ok(SAMPLE_CART.reduce((sum, item) => sum + item.price * item.quantity, 0) < 50000);
 });
 
-test('GET / returns the cart page as HTML, with a policy that allows no script', async (t) => {
+test('GET / returns the cart page as HTML, with a policy that allows no script, base, frame or form elsewhere', async (t) => {
   const url = await start(t);
   const response = await fetch(`${url}/`);
 
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('content-type'), 'text/html; charset=utf-8');
-  assert.equal(response.headers.get('content-security-policy'), "default-src 'none'; style-src 'unsafe-inline'");
+  assert.equal(response.headers.get('content-security-policy'), POLICY);
   assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
   const html = await response.text();
   assert.match(html, /<h1>Giỏ hàng<\/h1>/);
@@ -47,9 +63,25 @@ test('another path is 404, and another method is 405 with the allowed ones', asy
   const missing = await fetch(`${url}/admin`);
   assert.equal(missing.status, 404);
   assert.equal(missing.headers.get('content-type'), 'text/plain; charset=utf-8');
+  assert.equal(missing.headers.get('x-content-type-options'), 'nosniff');
   assert.equal(await missing.text(), 'Not found');
 
   const posted = await fetch(`${url}/`, { method: 'POST', body: 'x' });
   assert.equal(posted.status, 405);
   assert.equal(posted.headers.get('allow'), 'GET, HEAD');
+  assert.equal(posted.headers.get('x-content-type-options'), 'nosniff');
+});
+
+// Review of PR #9: `//` made new URL() throw and stop the server, and `//evil.example/` returned the page.
+test('a path that only looks like / is 404, and the server keeps answering', async (t) => {
+  const url = await start(t);
+  for (const path of ['//', '///', '//evil.example/', '//evil.example', '/index.html']) {
+    assert.equal((await fetch(`${url}${path}`)).status, 404, path);
+  }
+  assert.equal(await rawGet(url, 'http://other.example/'), 404, 'an absolute URL as the request target');
+  assert.equal((await fetch(`${url}/`)).status, 200, 'still running');
+});
+
+test('a cart the page cannot show stops the server from being made, not a request', () => {
+  assert.throws(() => cartServer([{ name: 'Bút bi', price: -1, quantity: 1 }]), RangeError);
 });
