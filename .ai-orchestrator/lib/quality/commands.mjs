@@ -3,9 +3,13 @@
 // changing the repository settings or deleting its workflow runs, running ao-pr.mjs with the other role's App, and
 // editing protected paths. With the roster, also the role rules of agent-roster spec 2.10 (lib/agents/scope.mjs):
 // files outside the role's paths, and git commands that change the checkout for read-only roles. Pure.
-// Commands are read the way a shell splits them: good enough for what agents write, not proof against a determined one.
+// Commands are read the way a shell splits them, with the script of sh -c and the command after env, command or exec:
+// good enough for what agents write, not proof against a determined one. A file written by a Bash command, such as a
+// redirection, is not checked; the role rules cover Edit and Write.
+import { posix } from 'node:path';
 import { gitRefusal, writeRefusal } from '../agents/scope.mjs';
 import { NON_AGENT_ROLES } from '../rules/references.mjs';
+import { configReads, gitSubcommand } from './git-options.mjs';
 import { matchesGlob } from './glob.mjs';
 
 const allow = { allow: true };
@@ -45,17 +49,36 @@ export function checkAgentCall(input, { gates, contract, projectDir, roster }) {
   }
 }
 
-function checkCommand(command, role, gates, roster) {
+function checkCommand(command, role, gates, roster, depth = 0) {
   if (TOKEN_COMMAND.test(command) || GH_HOSTS_FILE.test(command)) return deny(TOKEN);
   if (KEY_FILE.test(command)) return deny(KEY);
   for (const words of segments(command)) {
-    const program = words[0]?.split(/[\\/]/).at(-1).replace(/\.exe$/i, '');
-    const result = program === 'git' ? checkGit(words, gates) : program === 'gh' ? checkGh(words) : checkAoPr(words, role, gates);
+    const result = checkWords(words, role, gates, roster, depth);
     if (!result.allow) return result;
-    const refusal = program === 'git' && roster ? gitRefusal(roster, role, words) : null;
-    if (refusal) return deny(refusal);
   }
   return allow;
+}
+
+// sh -c and its kin run their script, and env, command and exec run the command after their options.
+const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash']);
+const RUNNERS = new Set(['env', 'command', 'exec']);
+
+function checkWords(words, role, gates, roster, depth) {
+  const program = words[0]?.split(/[\\/]/).at(-1).replace(/\.exe$/i, '');
+  if (SHELLS.has(program)) {
+    const at = words.findIndex((word, i) => i > 0 && /^-[a-z]*c[a-z]*$/.test(word));
+    if (at > 0 && words[at + 1] !== undefined) return depth < 5 ? checkCommand(words[at + 1], role, gates, roster, depth + 1) : deny('too many nested shells');
+  }
+  if (RUNNERS.has(program)) {
+    let i = 1;
+    // env -u NAME takes a value; VAR=value only sets the environment of the command.
+    while (i < words.length && (words[i].startsWith('-') || /^[A-Za-z_]\w*=/.test(words[i]))) i += words[i] === '-u' ? 2 : 1;
+    return i < words.length ? checkWords(words.slice(i), role, gates, roster, depth) : allow;
+  }
+  const result = program === 'git' ? checkGit(words, gates) : program === 'gh' ? checkGh(words) : checkAoPr(words, role, gates);
+  if (!result.allow) return result;
+  const refusal = program === 'git' && roster ? gitRefusal(roster, role, words) : null;
+  return refusal ? deny(refusal) : allow;
 }
 
 // The simple commands of a command line, as lists of words, with quotes removed and leading VAR=value dropped.
@@ -102,14 +125,10 @@ function segments(command) {
 const isProtected = (branch, gates) => gates.protected_branches.some((pattern) => matchesGlob(pattern, branch));
 
 function checkGit(words, gates) {
-  let i = 1;
-  // Options of git itself, before the subcommand: -c name=value and -C <path> take a value.
-  while (i < words.length && words[i].startsWith('-')) {
-    if (words[i] === '-c' && /^core\.hookspath/i.test(words[i + 1] ?? '')) return deny(HOOKS);
-    i += words[i] === '-c' || words[i] === '-C' ? 2 : 1;
-  }
-  const [sub, ...rest] = words.slice(i);
-  if (sub === 'config' && rest.some((w) => /^core\.hookspath(=|$)/i.test(w))) return deny(HOOKS);
+  const { index, settings } = gitSubcommand(words);
+  if (settings.includes('core.hookspath')) return deny(HOOKS);
+  const [sub, ...rest] = words.slice(index);
+  if (sub === 'config' && !configReads(rest) && rest.some((w) => /^core\.hookspath(=|$)/i.test(w))) return deny(HOOKS);
   if (sub === 'commit' && commitSkipsHooks(rest)) return deny(HOOKS);
   if (sub === 'push') return checkPush(rest, gates);
   return allow;
@@ -161,8 +180,15 @@ function checkPush(args, gates) {
 const PR_WRITES = ['create', 'edit', 'merge', 'review', 'close', 'ready', 'reopen', 'comment', 'revert', 'update-branch'];
 const REPO_WRITES = ['edit', 'delete', 'rename', 'archive', 'unarchive'];
 
+// gh auth token and status -t print your token; login, switch and the others change it. TOKEN_COMMAND sees the same in
+// the raw text; here the words are read after the shell's quotes and backslashes.
+const AUTH_TOKEN = ['token', 'login', 'logout', 'switch', 'refresh', 'setup-git'];
+
 function checkGh(words) {
   const [group, sub, action] = positional(words.slice(1));
+  if (group === 'auth' && (AUTH_TOKEN.includes(sub) || (sub === 'status' && words.some((w) => w === '--show-token' || /^-[^-h\s]*t/.test(w))))) {
+    return deny(TOKEN);
+  }
   if (group === 'pr' && PR_WRITES.includes(sub)) {
     return deny(`do not run gh pr ${sub} with your account; use node .ai-orchestrator/scripts/ao-pr.mjs (create, edit, comment, review), and leave merging to merge-gate`);
   }
@@ -221,10 +247,10 @@ function checkEdit(file, role, gates, projectDir, roster) {
   return refusal ? deny(refusal) : allow;
 }
 
-// The path inside the project with forward slashes, or null for a file outside it.
+// The path inside the project with forward slashes and no `.` or `..`, or null for a file outside it.
 function relativeToProject(file, projectDir) {
-  const path = file.replaceAll('\\', '/');
-  if (!/^(?:[A-Za-z]:)?\//.test(path)) return path.replace(/^\.\//, '');
+  const path = posix.normalize(file.replaceAll('\\', '/'));
+  if (!/^(?:[A-Za-z]:)?\//.test(path)) return path === '..' || path.startsWith('../') ? null : path;
   const root = `${projectDir.replaceAll('\\', '/').replace(/\/+$/, '')}/`;
   return path.toLowerCase().startsWith(root.toLowerCase()) ? path.slice(root.length) : null;
 }

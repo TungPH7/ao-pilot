@@ -51,7 +51,11 @@ When you work on an item, write `.ai/ledger/<KEY>.md` from the ledger template a
 
 ## Hooks
 
-When a hook refuses a call, quote its reason in your answer and stop. Do not look for another way to do the same thing.
+When a hook refuses a call, quote its reason in your answer, and do not look for another way to do the same thing. If your task needs that call, stop there; if it does not, such as a check you added yourself, go on without it.
+
+## Shell
+
+On Windows the shell is Git Bash, which rewrites an argument such as `origin/<branch>:<path>` into a Windows path list. Put `MSYS_NO_PATHCONV=1` in front of such a command, as in `MSYS_NO_PATHCONV=1 git show origin/<branch>:<path>`.
 
 ## Never
 
