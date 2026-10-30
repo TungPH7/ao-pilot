@@ -1,5 +1,5 @@
 import { shipping, total, type Line } from './cart.ts';
-import { discount, NO_COUPON, type CouponState } from './coupon.ts';
+import { discount, NO_COUPON, type Coupon, type CouponState } from './coupon.ts';
 
 export interface CartItem extends Line {
   name: string;
@@ -40,14 +40,21 @@ ${body}
 `;
 }
 
-// The coupon form of S1: field [3] and button [4]. It posts to / as application/x-www-form-urlencoded, the default of
-// a form. The field is not required, so the server checks it and every browser shows the same message.
-function couponForm(): string {
+// The coupon form of S1: field [3], button [4], and the coupon in force in the hidden field applied, which the server
+// checks again. It posts to / as application/x-www-form-urlencoded, the default of a form. The field is not required,
+// so the server checks it and every browser shows the same message.
+function couponForm(coupon: CouponState): string {
+  const applied = coupon.applied === null ? '' : `\n<input type="hidden" name="applied" value="${escapeHtml(coupon.applied.code)}">`;
   return `<form method="post" action="/">
 <label for="coupon-code">Mã giảm giá</label>
 <input type="text" id="coupon-code" name="code" maxlength="64" value="">
-<button type="submit">Áp dụng</button>
+<button type="submit">Áp dụng</button>${applied}
 </form>`;
+}
+
+// Line [7] of the coupon in force, as a minus amount. A discount of nothing is "0 ₫", since formatMoney(-0) is "-0 ₫".
+function discountLine(coupon: Coupon, off: number): string {
+  return `\n<dt>Giảm giá (${escapeHtml(coupon.code)})</dt><dd data-testid="discount">${formatMoney(off === 0 ? 0 : -off)}</dd>`;
 }
 
 function cartTable(items: CartItem[], coupon: CouponState): string {
@@ -64,9 +71,9 @@ function cartTable(items: CartItem[], coupon: CouponState): string {
 ${rows}
 </tbody>
 </table>
-${couponForm()}
+${couponForm(coupon)}
 <dl>
-<dt>Tạm tính</dt><dd data-testid="subtotal">${formatMoney(subtotal)}</dd>
+<dt>Tạm tính</dt><dd data-testid="subtotal">${formatMoney(subtotal)}</dd>${coupon.applied === null ? '' : discountLine(coupon.applied, off)}
 <dt>Phí vận chuyển</dt><dd data-testid="shipping">${fee === 0 ? 'Miễn phí' : formatMoney(fee)}</dd>
 <dt>Tổng cộng</dt><dd data-testid="total">${formatMoney(subtotal - off + fee)}</dd>
 </dl>`;

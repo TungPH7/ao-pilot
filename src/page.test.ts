@@ -102,3 +102,41 @@ test('without a coupon or a message the field has no error attributes and the fo
 test('an empty cart has no coupon form', () => {
   assert.doesNotMatch(renderCart([]), /<form|coupon-code|Áp dụng/);
 });
+
+test('a coupon in force shows the discount line [7] with its code and a minus sign, between the subtotal and the shipping fee', () => {
+  const html = renderCart(items, applyCoupon({ code: 'GIAM10', applied: '' }));
+  assert.match(
+    html,
+    /<dd data-testid="subtotal">[^<]*<\/dd>\n<dt>Giảm giá \(GIAM10\)<\/dt><dd data-testid="discount">-3\.900\u00a0₫<\/dd>\n<dt>Phí vận chuyển<\/dt>/,
+  );
+});
+
+test('a new code replaces the coupon in force, so there is only one discount line', () => {
+  const html = renderCart(items, applyCoupon({ code: 'GIAM20K', applied: 'GIAM10' }));
+  assert.equal(html.match(/data-testid="discount"/g)?.length, 1);
+  assert.match(html, /<dt>Giảm giá \(GIAM20K\)<\/dt><dd data-testid="discount">-20\.000\u00a0₫<\/dd>/);
+  assert.doesNotMatch(html, /GIAM10/);
+});
+
+test('a cart with a subtotal of 55.000 ₫ shows a discount of -5.500 ₫ with GIAM10', () => {
+  const html = renderCart([{ name: 'Balo', price: 55000, quantity: 1 }], applyCoupon({ code: 'GIAM10', applied: '' }));
+  assert.match(html, /<dd data-testid="discount">-5\.500\u00a0₫<\/dd>/);
+});
+
+test('a discount of nothing is shown as 0 ₫, without a minus sign', () => {
+  const html = renderCart([{ name: 'Kẹo', price: 5, quantity: 1 }], applyCoupon({ code: 'GIAM10', applied: '' }));
+  assert.match(html, /<dt>Giảm giá \(GIAM10\)<\/dt><dd data-testid="discount">0\u00a0₫<\/dd>/);
+});
+
+test('a coupon in force goes back with the form in the hidden field applied', () => {
+  const html = renderCart(items, applyCoupon({ code: 'GIAM10', applied: '' }));
+  assert.match(html, /<form method="post" action="\/">[^]*<input type="hidden" name="applied" value="GIAM10">[^]*<\/form>/);
+  assert.equal(html.match(/name="applied"/g)?.length, 1);
+});
+
+test('the code of a coupon is escaped in the discount line and in the hidden field', () => {
+  const html = renderCart(items, { applied: { code: '"><b>x</b>', kind: 'amount', value: 1000 }, rejected: null });
+  assert.match(html, /<dt>Giảm giá \(&#34;&#62;&#60;b&#62;x&#60;\/b&#62;\)<\/dt>/);
+  assert.match(html, /<input type="hidden" name="applied" value="&#34;&#62;&#60;b&#62;x&#60;\/b&#62;">/);
+  assert.doesNotMatch(html, /<b>/);
+});
