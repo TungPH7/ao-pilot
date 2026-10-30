@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { applyCoupon, NO_COUPON } from './coupon.ts';
 import { formatMoney, renderCart, type CartItem } from './page.ts';
 
 const items: CartItem[] = [
@@ -48,4 +49,31 @@ test('the page is a whole HTML document in Vietnamese', () => {
   assert.match(html, /^<!doctype html>\n<html lang="vi">/);
   assert.match(html, /<title>Giỏ hàng<\/title>/);
   assert.match(html, /<h1>Giỏ hàng<\/h1>/);
+});
+
+test('a coupon in force is taken off the total, while the subtotal and the shipping fee stay', () => {
+  const html = renderCart(items, applyCoupon({ code: 'GIAM10', applied: '' }));
+  assert.match(html, /<dd data-testid="subtotal">39\.000\u00a0₫<\/dd>/);
+  assert.match(html, /<dd data-testid="shipping">3\.000\u00a0₫<\/dd>/);
+  assert.match(html, /<dd data-testid="total">38\.100\u00a0₫<\/dd>/);
+  assert.match(renderCart(items, applyCoupon({ code: 'GIAM20K', applied: '' })), /<dd data-testid="total">22\.000\u00a0₫<\/dd>/);
+});
+
+test('the shipping fee is reckoned on the subtotal before the discount', () => {
+  const html = renderCart([{ name: 'Balo', price: 55000, quantity: 1 }], applyCoupon({ code: 'GIAM10', applied: '' }));
+  assert.match(html, /<dd data-testid="shipping">Miễn phí<\/dd>/);
+  assert.match(html, /<dd data-testid="total">49\.500\u00a0₫<\/dd>/);
+});
+
+test('a code that is refused without a coupon in force leaves the total as it is', () => {
+  assert.match(renderCart(items, applyCoupon({ code: 'SAIMA', applied: '' })), /<dd data-testid="total">42\.000\u00a0₫<\/dd>/);
+  assert.match(renderCart(items, applyCoupon({ code: '', applied: '' })), /<dd data-testid="total">42\.000\u00a0₫<\/dd>/);
+});
+
+test('without a coupon the page is the page of GET /', () => {
+  assert.equal(renderCart(items, NO_COUPON), renderCart(items));
+});
+
+test('an empty cart has no total to take a coupon off', () => {
+  assert.equal(renderCart([], applyCoupon({ code: 'GIAM10', applied: '' })), renderCart([]));
 });
