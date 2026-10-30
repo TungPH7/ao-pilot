@@ -10,6 +10,8 @@
 |---|---|---|---|---|
 | S1 | Giỏ hàng | / (GET, POST) | Là người mua, tôi muốn nhập mã giảm giá trên trang giỏ hàng để thấy ngay số tiền được giảm và tổng cộng mới (user story 1), và được báo rõ khi mã không dùng được (user story 2) | ASCII |
 
+User story 3 (AC9–AC11) không có màn hình. Các câu 400, 403 và 413 là `text/plain`, như 404 và 405 hiện có (body "Not found" và "Method not allowed" trong `src/server.ts`), không thuộc S1. Body của ba câu mới là "Bad request" (400), "Forbidden" (403) và "Payload too large" (413); `sa` ghi vào plan.
+
 ## Flow
 
 ```mermaid
@@ -75,37 +77,42 @@ blocks:
     name: Bảng sản phẩm
     type: table
     content: Tên, đơn giá, số lượng và thành tiền của từng dòng, không đổi so với DEMO-10
+    behavior: Epic không đổi bảng này. Nếu bảng tràn ngang ở một trong bốn cỡ kiểm (mục Bố cục), tách một Task riêng, không sửa trong Epic này.
     states:
       empty: 'Giỏ trống: trang hiện "Giỏ hàng trống." và không có [3] đến [9], kể cả ô nhập mã'
   3:
     name: Ô nhập mã giảm giá
     type: input
-    content: 'Nhãn hiện "Mã giảm giá", nằm trên ô. Ô là một dòng chữ (type text); sa chốt tên trường. Tìm bằng nhãn'
+    content: 'Nhãn hiện "Mã giảm giá", nằm trên ô. Ô là một dòng chữ (type text) với maxlength="64"; sa chốt tên trường. Tìm bằng nhãn "Mã giảm giá"'
     behavior: >-
       Nhấn Enter trong ô gửi form như bấm [4]. Mã được bỏ khoảng trắng hai đầu và đổi sang chữ hoa trước khi so với
       danh sách.
     validation: >-
       Không dùng thuộc tính required, để server kiểm và mọi trình duyệt hiện cùng một thông báo. Trống sau khi bỏ
       khoảng trắng thì hiện [5] "Vui lòng nhập mã giảm giá."; không có trong danh sách thì hiện [5] "Mã giảm giá không
-      hợp lệ."
+      hợp lệ." maxlength="64" chỉ để người mua bình thường không chạm giới hạn body 1.024 byte; server vẫn tự kiểm,
+      và mã dài hơn chỉ là mã không hợp lệ.
     states:
       default: Trống
       applied: Trống sau khi áp mã đúng; mã đang áp hiện ở [7]
       error: >-
         Giữ đúng chuỗi người dùng đã gõ, không chuẩn hóa, và qua escapeHtml trong value="…" có dấu nháy (AC5, AC8).
-        Có aria-invalid="true" và aria-describedby trỏ tới [5]
+        Có autofocus, aria-invalid="true" và aria-describedby trỏ tới [5]. Không có lỗi thì không có cả ba thuộc tính.
     a11y: >-
       Nhãn gắn với ô bằng for và id. Thứ tự Tab: [3] rồi [4]. Viền ô dày hơn khi có lỗi, để lỗi không chỉ dựa vào màu.
+      autofocus chỉ có khi [5] hiện. [Unverified] Chưa kiểm autofocus trên Chrome với CSP của trang; fe-dev kiểm, và
+      nếu autofocus không chạy thì bỏ nó, giữ aria-invalid và aria-describedby.
     ac: [AC3, AC5, AC6, AC8]
   4:
     name: Nút Áp dụng
     type: button
-    content: Nhãn "Áp dụng"
+    content: Nhãn "Áp dụng". Tìm bằng role button với tên "Áp dụng"
     behavior: >-
       Gửi form POST / dạng application/x-www-form-urlencoded, gồm ô [3] và mã đang áp (ví dụ trong một trường ẩn;
       sa chốt tên trường trong plan). Server kiểm lại cả hai mã, không nhận số tiền từ form. Mã mới đúng thì thay mã cũ
-      và [7] đổi theo. Mã mới sai hoặc trống thì hiện [5] và giữ mã đang áp. Trang không đặt Referrer-Policy:
-      no-referrer, bằng header hay thẻ meta.
+      và [7] đổi theo. Mã mới sai hoặc trống thì hiện [5] và giữ mã đang áp. Server trả thẳng trang 200 cho POST /,
+      không chuyển hướng, vì không lưu trạng thái; giữ mã đã áp khi tải lại trang nằm ngoài phạm vi của SPEC. Trang
+      không đặt Referrer-Policy: no-referrer, bằng header hay thẻ meta.
     states:
       focus: Giữ viền focus của trình duyệt, không tắt outline
     a11y: Là button type submit với nhãn chữ hiển thị. Trang không có script, nên không có trạng thái đang gửi.
@@ -113,7 +120,7 @@ blocks:
   5:
     name: Thông báo lỗi của mã
     type: text
-    content: '"Mã giảm giá không hợp lệ." hoặc "Vui lòng nhập mã giảm giá.", một câu một lần, nằm dưới hàng [3] [4]. data-testid đề xuất: coupon-error'
+    content: '"Mã giảm giá không hợp lệ." hoặc "Vui lòng nhập mã giảm giá.", một câu một lần, nằm dưới hàng [3] [4]. data-testid: coupon-error'
     behavior: Chỉ hiện khi POST bị từ chối vì mã. Câu không chứa mã người dùng gõ. Khi [5] hiện, [6] đến [9] vẫn tính theo mã đang áp, nếu có (AC5, AC7).
     a11y: Có id để [3] trỏ tới bằng aria-describedby. Chữ màu lỗi, nhưng câu chữ tự nói đây là lỗi.
     ac: [AC5, AC6, AC7, AC8]
@@ -127,11 +134,11 @@ blocks:
     type: text
     content: >-
       Nhãn "Giảm giá (<mã>)", với mã ở dạng chữ hoa; giá trị là số tiền giảm kèm dấu trừ, như "-3.900 ₫" (dấu gạch
-      nối ASCII và no-break space trước ₫, đúng kết quả formatMoney(-3900)). Nằm giữa [6] và [8]. data-testid đề
-      xuất: discount
+      nối ASCII và no-break space trước ₫, đúng kết quả formatMoney(-3900)). Nằm giữa [6] và [8]. data-testid của
+      giá trị: discount
     behavior: >-
       Chỉ hiện khi có mã đang áp, và chỉ một dòng: áp mã mới thì thay dòng cũ (AC4). Mã trong nhãn lấy từ danh sách mã
-      và vẫn qua escapeHtml.
+      và vẫn qua escapeHtml. Trang không có thông báo thành công: dòng này là dấu hiệu duy nhất cho thấy mã đã áp.
     states:
       none: Không có dòng này khi chưa áp mã
       applied: GIAM10 trên tạm tính 39.000 ₫ hiện "-3.900 ₫"; GIAM20K hiện "-20.000 ₫", và không vượt tạm tính
@@ -154,10 +161,13 @@ Bố cục theo cỡ màn hình:
 - Giữ cách dựng hiện có: một cột, font hệ thống, khoảng cách theo bậc 0,25 rem như `STYLE` của `src/page.ts`, không đổ bóng, không gradient, không thêm màu ngoài màu chữ lỗi của [5].
 - Hàng [3] và [4] dùng flex-wrap, không media query: ô và nút nằm một hàng khi đủ chỗ; khi hàng không đủ chỗ (màn hình hẹp), nút xuống dòng dưới ô và ô co giãn tới hết dòng.
 - Danh sách [6] đến [9] giữ lưới hai cột của `dl` hiện có. Dòng [7] chèn vào cùng lưới.
+- Câu chữ "Mã giảm giá" (nhãn [3]) và "Giảm giá (<mã>)" (nhãn [7]) là câu chữ của design, đã được chốt cùng ba câu của SPEC.
+- Bố cục thật chưa kiểm vì chưa có code. `fe-dev` và `qa` kiểm trang ở 320, 768, 1024 và 1440 px. [Unverified] Bảng [2] bốn cột ở 320 px chưa kiểm có tràn ngang không.
+- Ngoài phạm vi, nên không có màn hình hay trạng thái: nút bỏ mã, hạn dùng, điều kiện đơn tối thiểu, số lượt dùng của mã.
 
 ## Open Questions
 
-Không có người trả lời trong phiên này. Mỗi câu kèm đề xuất của `ux`; người duyệt SPEC có thể đổi.
+Không còn câu hỏi mở. Các câu Q1–Q10 của bản trước được trả lời ngày 2026-10-31, thay người duyệt. Các câu trả lời đã thành quyết định ở mục Screens (user story 3 và body của 400, 403, 413), trong YAML của các khối [2] đến [5] và [7], và trong mục Bố cục theo cỡ màn hình của S1.
 
 - **Q1. User story 3 (AC9–AC11) không có màn hình.** Các câu 400, 403 và 413 là `text/plain`, như 404 và 405 hiện có, không thuộc S1. Body của 404 và 405 hiện là "Not found" và "Method not allowed" (đọc từ `src/server.ts`). Đề xuất: body 400, 403 và 413 cũng là tiếng Anh ngắn, như "Bad request", "Forbidden", "Payload too large"; `sa` chốt trong plan.
 - **Q2. Sau khi áp mã đúng, ô [3] trống hay giữ mã?** Đề xuất: trống; mã đang áp hiện ở [7] và đi kèm form qua trường ẩn.
