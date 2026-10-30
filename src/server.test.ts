@@ -6,19 +6,31 @@ import { cartServer, SAMPLE_CART } from './server.ts';
 
 const POLICY = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 
-// Starts the server on a free port of 127.0.0.1 and stops it after the test.
+// Every request of this file gives up after this many milliseconds, so a server that does not answer fails the test
+// instead of hanging it (review of PR #9).
+const TIMEOUT = 5000;
+
+// Starts the server on a free port of 127.0.0.1 and stops it after the test, dropping the connections still open.
 async function start(t: TestContext) {
   const server = cartServer();
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  t.after(() => server.close());
+  t.after(() => {
+    server.closeAllConnections();
+    server.close();
+  });
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+}
+
+// fetch with the timeout of this file.
+function send(url: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(url, { ...init, signal: AbortSignal.timeout(TIMEOUT) });
 }
 
 // A GET with the request target written as is, such as an absolute URL, which fetch would not send.
 function rawGet(url: string, target: string): Promise<number | undefined> {
   return new Promise((resolve, reject) => {
     const { hostname, port } = new URL(url);
-    request({ hostname, port, path: target }, (response) => {
+    request({ hostname, port, path: target, signal: AbortSignal.timeout(TIMEOUT) }, (response) => {
       response.resume();
       resolve(response.statusCode);
     })
@@ -34,7 +46,7 @@ test('the sample cart has two lines with a subtotal under the free shipping thre
 
 test('GET / returns the cart page as HTML, with a policy that allows no script, base, frame or form elsewhere', async (t) => {
   const url = await start(t);
-  const response = await fetch(`${url}/`);
+  const response = await send(`${url}/`);
 
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('content-type'), 'text/html; charset=utf-8');
@@ -48,25 +60,25 @@ test('GET / returns the cart page as HTML, with a policy that allows no script, 
 
 test('a query string does not change the page', async (t) => {
   const url = await start(t);
-  assert.equal(await (await fetch(`${url}/?x=1`)).text(), await (await fetch(`${url}/`)).text());
+  assert.equal(await (await send(`${url}/?x=1`)).text(), await (await send(`${url}/`)).text());
 });
 
 test('HEAD / returns the headers without a body', async (t) => {
   const url = await start(t);
-  const response = await fetch(`${url}/`, { method: 'HEAD' });
+  const response = await send(`${url}/`, { method: 'HEAD' });
   assert.equal(response.status, 200);
   assert.equal(await response.text(), '');
 });
 
 test('another path is 404, and another method is 405 with the allowed ones', async (t) => {
   const url = await start(t);
-  const missing = await fetch(`${url}/admin`);
+  const missing = await send(`${url}/admin`);
   assert.equal(missing.status, 404);
   assert.equal(missing.headers.get('content-type'), 'text/plain; charset=utf-8');
   assert.equal(missing.headers.get('x-content-type-options'), 'nosniff');
   assert.equal(await missing.text(), 'Not found');
 
-  const posted = await fetch(`${url}/`, { method: 'POST', body: 'x' });
+  const posted = await send(`${url}/`, { method: 'POST', body: 'x' });
   assert.equal(posted.status, 405);
   assert.equal(posted.headers.get('allow'), 'GET, HEAD');
   assert.equal(posted.headers.get('x-content-type-options'), 'nosniff');
@@ -76,10 +88,10 @@ test('another path is 404, and another method is 405 with the allowed ones', asy
 test('a path that only looks like / is 404, and the server keeps answering', async (t) => {
   const url = await start(t);
   for (const path of ['//', '///', '//evil.example/', '//evil.example', '/index.html']) {
-    assert.equal((await fetch(`${url}${path}`)).status, 404, path);
+    assert.equal((await send(`${url}${path}`)).status, 404, path);
   }
   assert.equal(await rawGet(url, 'http://other.example/'), 404, 'an absolute URL as the request target');
-  assert.equal((await fetch(`${url}/`)).status, 200, 'still running');
+  assert.equal((await send(`${url}/`)).status, 200, 'still running');
 });
 
 test('a cart the page cannot show stops the server from being made, not a request', () => {
