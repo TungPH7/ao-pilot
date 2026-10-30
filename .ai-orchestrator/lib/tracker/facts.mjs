@@ -83,14 +83,15 @@ export function jiraTime(created) {
   return Date.parse(String(created).replace(/([+-]\d\d)(\d\d)$/, '$1:$2'));
 }
 
-// PASS or FAIL from a comment written with templates/qa-report.md, as ADF or as markdown text; null for any other
-// comment, or a report whose Result is not filled in.
+// PASS, FAIL or NOT TESTED from a comment written with templates/qa-report.md, as ADF or as markdown text; null for
+// any other comment, or a report whose Result is not filled in. NOT TESTED counts as a report, so it hides an older FAIL
+// (agent-roster spec 2.9).
 export function qaReportResult(body) {
   const lines = (typeof body === 'string' ? body : adfText(body)).split('\n').map((line) => line.replace(/^#+\s*/, '').trim());
   if (!lines.some((line) => /^QA report\b/i.test(line))) return null;
   const at = lines.findIndex((line) => /^Result$/i.test(line));
   const result = lines.slice(at + 1).find((line) => line !== '');
-  return at !== -1 && /^(PASS|FAIL)$/.test(result ?? '') ? result : null;
+  return at !== -1 && /^(PASS|FAIL|NOT TESTED)$/.test(result ?? '') ? result : null;
 }
 
 // Plain text of an Atlassian Document Format node, one line per block.

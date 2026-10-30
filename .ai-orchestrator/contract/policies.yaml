@@ -69,6 +69,13 @@ artifacts:
     created_by: [ba]
     stored_in:
       - { place: git, path: "docs/specs/<EPIC-KEY>/spec.md" }
+  - id: design
+    name: "Thiết kế màn hình"
+    template: templates/design.md
+    created_by: [ux]
+    stored_in:
+      - { place: git, path: "docs/specs/<EPIC-KEY>/design.md" }
+      - { place: git, path: "docs/specs/<EPIC-KEY>/design/", note: "ảnh của màn hình kiểu Figma" }
   - id: plan
     name: "Plan"
     template: templates/plan.md

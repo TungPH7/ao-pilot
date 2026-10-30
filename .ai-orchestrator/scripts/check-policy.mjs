@@ -1,6 +1,6 @@
 // The policy job of CI (quality-gates spec section 2.4). On a PR: the conventions of its branch, commits and title, the
-// suppressions its added lines bring, the thresholds it lowers in quality/gates.yaml, and npm audit. On a push: npm
-// audit only. Results go to the job summary in CI.
+// suppressions its added lines bring, the thresholds it lowers in quality/gates.yaml, the design.md files it touches
+// (agent-roster spec 2.8), and npm audit. On a push: npm audit only. Results go to the job summary in CI.
 // In CI the PR comes from the GitHub event; elsewhere: --base <ref> --branch <name> --title "<title>".
 import { spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
@@ -10,7 +10,8 @@ import { parseArgs } from 'node:util';
 import { parse } from 'yaml';
 import { readGates } from '../lib/quality/gates.mjs';
 import { runNpm } from '../lib/quality/npm.mjs';
-import { auditProblems, checkConventions } from '../lib/quality/policy.mjs';
+import { checkDesignFile } from '../lib/quality/design-files.mjs';
+import { auditProblems, checkConventions, designFilesToCheck } from '../lib/quality/policy.mjs';
 import { addedLines, deletedTests, findSuppressions, loweredThresholds } from '../lib/quality/suppressions.mjs';
 
 function run(command, args, options = {}) {
@@ -57,6 +58,13 @@ try {
     const gatesFile = relative(root, join(gatesDir, 'gates.yaml')).replaceAll('\\', '/');
     const before = run('git', ['show', `${base}:${gatesFile}`]);
     sections.push(['Thresholds', before.status === 0 ? loweredThresholds(parse(before.stdout), gates) : []]);
+
+    const changes = git('diff', '--name-status', '--no-renames', base, 'HEAD')
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => ({ status: line[0], path: line.split('\t').at(-1) }));
+    const designs = designFilesToCheck(changes, (path) => existsSync(join(root, path)));
+    sections.push(['Design', designs.flatMap((path) => checkDesignFile(join(root, path)).map(({ rule, line, message }) => `${path}:${line} ${rule} ${message}`))]);
   }
 
   if (existsSync(join(root, 'package-lock.json'))) {

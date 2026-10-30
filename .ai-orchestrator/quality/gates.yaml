@@ -7,12 +7,13 @@ checks: [policy, build-test, secrets, sast]
 
 # Coverage of the lines a PR adds or changes, read from the lcov files the project's test:coverage script writes. The
 # project's coverage must include every source file, even one no test imports yet. Config files and generated
-# migrations are left out (Checkpoint 1, 2026-10-29).
+# migrations are left out (Checkpoint 1, 2026-10-29), and so is the kit copy in .ai-orchestrator/ and .claude/, whose
+# code is tested in the kit.
 coverage:
   changed_lines_min: 80
   lcov: ["coverage/lcov.info", "apps/*/coverage/lcov.info"]
   source: ["**/*.{ts,tsx,js,jsx,mjs,cjs}"]
-  exclude: ["**/*.{test,spec}.*", "**/*.d.ts", "**/*.config.*", "**/migrations/**", "e2e/**", ".ai-orchestrator/**"]
+  exclude: ["**/*.{test,spec}.*", "**/*.d.ts", "**/*.config.*", "**/migrations/**", "e2e/**", ".ai-orchestrator/**", ".claude/**"]
 
 # npm audit fails on this level and above. An exception names a GitHub advisory, why it is accepted, and when it ends.
 dependencies:
