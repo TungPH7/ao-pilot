@@ -140,3 +140,43 @@ test('the code of a coupon is escaped in the discount line and in the hidden fie
   assert.match(html, /<input type="hidden" name="applied" value="&#34;&#62;&#60;b&#62;x&#60;\/b&#62;">/);
   assert.doesNotMatch(html, /<b>/);
 });
+
+test('an unknown code shows message [5] in the form and keeps what was typed in the field, pointing to the message', () => {
+  const html = renderCart(items, applyCoupon({ code: 'SAIMA', applied: '' }));
+  assert.match(html, /<p id="coupon-error" data-testid="coupon-error">Mã giảm giá không hợp lệ\.<\/p>\n<\/form>/);
+  assert.match(html, /<input type="text" id="coupon-code" name="code" maxlength="64" value="SAIMA" autofocus aria-invalid="true" aria-describedby="coupon-error">/);
+  assert.doesNotMatch(html, /data-testid="discount"/);
+});
+
+test('an empty code shows the message that asks for one, and keeps the spaces that were typed', () => {
+  const html = renderCart(items, applyCoupon({ code: '   ', applied: '' }));
+  assert.match(html, /<p id="coupon-error" data-testid="coupon-error">Vui lòng nhập mã giảm giá\.<\/p>/);
+  assert.ok(html.includes('name="code" maxlength="64" value="   " autofocus aria-invalid="true" aria-describedby="coupon-error">'));
+});
+
+test('the message does not repeat the code that was typed', () => {
+  const html = renderCart(items, applyCoupon({ code: 'SAIMA', applied: '' }));
+  assert.match(html, /data-testid="coupon-error">[^<]*<\/p>/);
+  assert.doesNotMatch(html.match(/data-testid="coupon-error">([^<]*)<\/p>/)?.[1] ?? '', /SAIMA/);
+});
+
+test('a refused code keeps the coupon in force: its discount line and its hidden field stay beside the message', () => {
+  const html = renderCart(items, applyCoupon({ code: 'SAIMA', applied: 'GIAM10' }));
+  assert.match(html, /data-testid="coupon-error">Mã giảm giá không hợp lệ\.<\/p>/);
+  assert.match(html, /<dt>Giảm giá \(GIAM10\)<\/dt><dd data-testid="discount">-3\.900\u00a0₫<\/dd>/);
+  assert.match(html, /<input type="hidden" name="applied" value="GIAM10">/);
+  assert.match(html, /value="SAIMA" autofocus/);
+});
+
+test('a code that was typed is escaped in the value of the field, so it cannot add markup to the page', () => {
+  const html = renderCart(items, applyCoupon({ code: '"><b>x</b>', applied: '' }));
+  assert.match(html, /name="code" maxlength="64" value="&#34;&#62;&#60;b&#62;x&#60;\/b&#62;" autofocus/);
+  assert.match(html, /data-testid="coupon-error">Mã giảm giá không hợp lệ\.<\/p>/);
+  assert.doesNotMatch(html, /<b>/);
+});
+
+test('an accepted code leaves the field empty and without the error attributes', () => {
+  const html = renderCart(items, applyCoupon({ code: 'GIAM10', applied: '' }));
+  assert.match(html, /name="code" maxlength="64" value="">/);
+  assert.doesNotMatch(html, /autofocus|aria-invalid|coupon-error/);
+});

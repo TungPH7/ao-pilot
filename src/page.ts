@@ -40,15 +40,27 @@ ${body}
 `;
 }
 
+// Message [5] for each reason a code is refused, word for word as in the SPEC. It never repeats the code typed.
+const MESSAGES: Record<'empty' | 'invalid', string> = {
+  empty: 'Vui lòng nhập mã giảm giá.',
+  invalid: 'Mã giảm giá không hợp lệ.',
+};
+
 // The coupon form of S1: field [3], button [4], and the coupon in force in the hidden field applied, which the server
 // checks again. It posts to / as application/x-www-form-urlencoded, the default of a form. The field is not required,
 // so the server checks it and every browser shows the same message.
 function couponForm(coupon: CouponState): string {
-  const applied = coupon.applied === null ? '' : `\n<input type="hidden" name="applied" value="${escapeHtml(coupon.applied.code)}">`;
+  const { applied, rejected } = coupon;
+  // A refused code goes back into the field as typed, and the field points to message [5]; an accepted one does not.
+  const field = rejected === null
+    ? 'value=""'
+    : `value="${escapeHtml(rejected.typed)}" autofocus aria-invalid="true" aria-describedby="coupon-error"`;
+  const hidden = applied === null ? '' : `\n<input type="hidden" name="applied" value="${escapeHtml(applied.code)}">`;
+  const message = rejected === null ? '' : `\n<p id="coupon-error" data-testid="coupon-error">${MESSAGES[rejected.reason]}</p>`;
   return `<form method="post" action="/">
 <label for="coupon-code">Mã giảm giá</label>
-<input type="text" id="coupon-code" name="code" maxlength="64" value="">
-<button type="submit">Áp dụng</button>${applied}
+<input type="text" id="coupon-code" name="code" maxlength="64" ${field}>
+<button type="submit">Áp dụng</button>${hidden}${message}
 </form>`;
 }
 
