@@ -8,6 +8,9 @@ const items: CartItem[] = [
   { name: 'Sổ tay', price: 12000, quantity: 2 },
 ];
 
+// The markup of a page, without its head: the style names the selectors of the coupon form whether or not it is there.
+const main = (html: string): string => html.slice(html.indexOf('<main>'));
+
 test('money is shown in đồng, the Vietnamese way', () => {
   assert.equal(formatMoney(39000), '39.000\u00a0₫');
   assert.equal(formatMoney(0), '0\u00a0₫');
@@ -93,14 +96,14 @@ test('the coupon field is not required, so the server checks it and every browse
 });
 
 test('without a coupon or a message the field has no error attributes and the form has no hidden field', () => {
-  const html = renderCart(items);
+  const html = main(renderCart(items));
   assert.doesNotMatch(html, /autofocus|aria-invalid|aria-describedby/);
   assert.doesNotMatch(html, /type="hidden"|name="applied"/);
   assert.doesNotMatch(html, /data-testid="coupon-error"|data-testid="discount"/);
 });
 
 test('an empty cart has no coupon form', () => {
-  assert.doesNotMatch(renderCart([]), /<form|coupon-code|Áp dụng/);
+  assert.doesNotMatch(main(renderCart([])), /<form|coupon-code|Áp dụng/);
 });
 
 test('a coupon in force shows the discount line [7] with its code and a minus sign, between the subtotal and the shipping fee', () => {
@@ -178,5 +181,20 @@ test('a code that was typed is escaped in the value of the field, so it cannot a
 test('an accepted code leaves the field empty and without the error attributes', () => {
   const html = renderCart(items, applyCoupon({ code: 'GIAM10', applied: '' }));
   assert.match(html, /name="code" maxlength="64" value="">/);
-  assert.doesNotMatch(html, /autofocus|aria-invalid|coupon-error/);
+  assert.doesNotMatch(main(html), /autofocus|aria-invalid|coupon-error/);
+});
+
+test('the style wraps the button under the field when the row is too narrow, without a media query', () => {
+  const style = renderCart(items).match(/<style>([^<]*)<\/style>/)?.[1] ?? '';
+  assert.match(style, /form\{[^}]*display:flex[^}]*flex-wrap:wrap/);
+  assert.match(style, /#coupon-code\{[^}]*flex:1 1 /);
+  assert.doesNotMatch(style, /@media/);
+});
+
+test('the style colours message [5] and gives a refused field a thicker border, so the error is not shown by colour alone', () => {
+  const style = renderCart(items).match(/<style>([^<]*)<\/style>/)?.[1] ?? '';
+  assert.match(style, /#coupon-error\{[^}]*color:#[0-9a-f]{6}/);
+  assert.match(style, /#coupon-code\{[^}]*border:1px solid/);
+  assert.match(style, /#coupon-code\[aria-invalid="true"\]\{[^}]*border:2px solid/);
+  assert.doesNotMatch(style, /outline:(none|0)/, 'the focus ring of the browser stays');
 });

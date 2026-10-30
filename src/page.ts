@@ -15,7 +15,15 @@ export function formatMoney(amount: number): string {
 // Every character that could start markup or end an attribute, as a numeric reference.
 const escapeHtml = (text: string): string => text.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
 
-const STYLE = 'body{font-family:system-ui,sans-serif;margin:2rem}table{border-collapse:collapse}th,td{padding:.25rem .75rem;text-align:left}dl{display:grid;grid-template-columns:max-content max-content;gap:.25rem 1rem}';
+// The coupon form is one flex row that wraps, with no media query: the label takes a line of its own, the field and
+// the button share the next one while it is wide enough, and the button goes under the field, which then fills the
+// line, when it is not. Message [5] takes its own line. Its colour is the only one the page adds, and a refused field
+// also has a thicker border, so the error is not shown by colour alone.
+const STYLE = 'body{font-family:system-ui,sans-serif;margin:2rem}table{border-collapse:collapse}th,td{padding:.25rem .75rem;text-align:left}'
+  + 'form{display:flex;flex-wrap:wrap;gap:.5rem;max-width:32rem;margin:1rem 0}label,#coupon-error{flex:1 0 100%;margin:0}'
+  + 'input,button{font:inherit;padding:.25rem .5rem}#coupon-code{flex:1 1 12rem;min-width:0;border:1px solid}'
+  + '#coupon-code[aria-invalid="true"]{border:2px solid #b00020}#coupon-error{color:#b00020}'
+  + 'dl{display:grid;grid-template-columns:max-content max-content;gap:.25rem 1rem}';
 
 // The cart page as a whole HTML document: one row per item, then the subtotal, the shipping fee and the total, less
 // the discount of the coupon in force. An empty cart ignores the coupon. Throws the RangeError of total() when an item
