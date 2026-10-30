@@ -63,6 +63,9 @@ function raw(url: string, options: { method?: string; path?: string; headers?: s
   });
 }
 
+// The Host and the Origin of a request sent by the page of this server.
+const own = (url: string): string[] => ['Host', new URL(url).host, 'Origin', url];
+
 // Bytes written as they are through node:net, for what node:http cannot send, such as HTTP/1.0. Resolves with the whole
 // answer once the server closes the connection.
 function wire(url: string, text: string): Promise<string> {
@@ -116,10 +119,12 @@ test('another path is 404, and another method is 405 with the allowed ones', asy
   assert.equal(missing.headers.get('x-content-type-options'), 'nosniff');
   assert.equal(await missing.text(), 'Not found');
 
-  const posted = await send(`${url}/`, { method: 'POST', body: 'x' });
-  assert.equal(posted.status, 405);
-  assert.equal(posted.headers.get('allow'), 'GET, HEAD');
-  assert.equal(posted.headers.get('x-content-type-options'), 'nosniff');
+  const put = await send(`${url}/`, { method: 'PUT', body: 'x' });
+  assert.equal(put.status, 405);
+  assert.equal(put.headers.get('allow'), 'GET, HEAD, POST');
+  assert.equal(put.headers.get('content-type'), 'text/plain; charset=utf-8');
+  assert.equal(put.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(await put.text(), 'Method not allowed');
 });
 
 // Review of PR #9: `//` made new URL() throw and stop the server, and `//evil.example/` returned the page.
@@ -186,5 +191,44 @@ test('two Host headers are 400, even when both name this server', async (t) => {
     const reply = await raw(url, { headers: ['Host', host, 'Host', second] });
     assert.equal(reply.status, 400, `second Host ${second}`);
     assert.equal(reply.body, 'Bad request');
+  }
+});
+
+// AC9: a form posted by another site carries that site's Origin, so only the page of this server gets its POST read.
+test('a POST / from another origin, or without one, is 403 Forbidden and not the page', async (t) => {
+  const url = await start(t);
+  const { host, port } = new URL(url);
+  const origins = [
+    ['Origin', 'http://evil.example'],
+    [],
+    ['Origin', 'null'],
+    ['Origin', url, 'Origin', 'http://evil.example'],
+    ['Origin', `http://localhost:${port}`],
+    ['Origin', `https://${host}`],
+    ['Origin', `${url}/`],
+  ];
+  for (const origin of origins) {
+    const reply = await raw(url, { method: 'POST', headers: ['Host', host, ...origin], body: 'code=GIAM10' });
+    assert.equal(reply.status, 403, origin.join(' '));
+    assert.equal(reply.headers['content-type'], 'text/plain; charset=utf-8');
+    assert.equal(reply.headers['x-content-type-options'], 'nosniff');
+    assert.equal(reply.body, 'Forbidden');
+  }
+});
+
+test('the Origin is checked before the body, so a large body from another origin is 403', async (t) => {
+  const url = await start(t);
+  const body = 'code='.padEnd(5000, 'A');
+  const reply = await raw(url, { method: 'POST', headers: ['Host', new URL(url).host, 'Origin', 'http://evil.example', 'Content-Length', String(body.length)], body });
+  assert.equal(reply.status, 403);
+});
+
+test('a POST / from the page of this server, by either of its names, is answered with the page', async (t) => {
+  const url = await start(t);
+  const local = `localhost:${new URL(url).port}`;
+  for (const headers of [own(url), ['Host', local, 'Origin', `http://${local}`]]) {
+    const reply = await raw(url, { method: 'POST', headers, body: 'code=' });
+    assert.equal(reply.status, 200, headers.join(' '));
+    assert.match(reply.body, /<h1>Giỏ hàng<\/h1>/);
   }
 });

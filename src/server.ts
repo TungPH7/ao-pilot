@@ -39,10 +39,15 @@ export function cartServer(items: CartItem[] = SAMPLE_CART): Server {
       response.writeHead(400, TEXT_HEADERS).end('Bad request');
     } else if (path !== '/') {
       response.writeHead(404, TEXT_HEADERS).end('Not found');
-    } else if (request.method !== 'GET' && request.method !== 'HEAD') {
-      response.writeHead(405, { ...TEXT_HEADERS, Allow: 'GET, HEAD' }).end('Method not allowed');
-    } else {
+    } else if (request.method === 'GET' || request.method === 'HEAD') {
       response.writeHead(200, PAGE_HEADERS).end(request.method === 'HEAD' ? undefined : page);
+    } else if (request.method !== 'POST') {
+      response.writeHead(405, { ...TEXT_HEADERS, Allow: 'GET, HEAD, POST' }).end('Method not allowed');
+    } else if (request.headers.origin !== `http://${host}`) {
+      // Two Origin headers reach here joined by a comma, so they are not equal either (AC9).
+      response.writeHead(403, TEXT_HEADERS).end('Forbidden');
+    } else {
+      response.writeHead(200, PAGE_HEADERS).end(page);
     }
   });
   return server;
