@@ -64,6 +64,10 @@ PR của Story chỉ mở khi cả hai Sub-task đã xong.
 8. **Cơ sở dữ liệu và dependency.**
    - Cơ sở dữ liệu không đổi: Epic không có cơ sở dữ liệu, và danh sách mã là hằng số trong `src/coupon.ts`.
    - Không thêm dependency, theo mục Tech Stack của SPEC.
+9. **Tài liệu của Epic ở lại trên nhánh `feature/DEMO-11-spec`.** Đây là câu trả lời Q1, ngày 2026-10-31.
+   - SPEC, design, plan và ADR-0001 không merge vào `develop`, và không có PR tài liệu. Lý do: ở giai đoạn thử này của kit, luồng PR cho tài liệu chưa có; nó sẽ có ở một module sau.
+   - Nhánh Story tách từ `develop` nên không có các file này. `be-dev`, `fe-dev`, `reviewer` và `qa` đọc tài liệu bằng `git show feature/DEMO-11-spec:docs/specs/DEMO-11/<file>`, và đọc ADR-0001 bằng `git show feature/DEMO-11-spec:docs/adr/0001-host-and-origin-checks-for-post.md`.
+   - Story vẫn sang ready khi plan được duyệt.
 
 ## API Contract
 
@@ -268,7 +272,7 @@ Phần của Sub-task FE. Test và server dựa vào các tên dưới đây, n�
 | [4] | `<button type="submit">Áp dụng</button>` | Luôn có, cùng form |
 | Trường ẩn | `<input type="hidden" name="applied" value="…">` | Chỉ khi `applied` khác `null`. `value` là `escapeHtml(applied.code)` |
 | [5] | Phần tử có `id="coupon-error"` và `data-testid="coupon-error"` | Chỉ khi `rejected` khác `null`. Câu chữ theo `reason` |
-| [7] | `<dt>Giảm giá (…)</dt><dd data-testid="discount">…</dd>`, nằm giữa [6] và [8] | Chỉ khi `applied` khác `null`. Giá trị là `formatMoney(-số tiền giảm)` |
+| [7] | `<dt>Giảm giá (…)</dt><dd data-testid="discount">…</dd>`, nằm giữa [6] và [8] | Chỉ khi `applied` khác `null`. Giá trị là `formatMoney(-số tiền giảm)`. Số tiền giảm bằng 0 thì giá trị là "0 ₫", không có dấu trừ (Q2), vì `formatMoney(-0)` cho "-0 ₫" |
 
 - Thuộc tính luôn có dấu nháy kép. Mọi chuỗi từ người dùng hay từ danh sách mã đi qua `escapeHtml`.
 - Không thêm `<script>`, không thêm `Referrer-Policy`, không đổi CSP.
@@ -280,7 +284,8 @@ Phần của Sub-task FE. Test và server dựa vào các tên dưới đây, n�
 
 - Nhánh của Story là `feature/<STORY-KEY>-coupon-code`, tách từ `develop`. Nhánh `develop` đã có DEMO-10 (commit `6c25b8b`; tôi kiểm ngày 2026-10-31).
 - Hai Sub-task commit lên nhánh này, BE trước.
-- Story không phụ thuộc item Jira nào. Câu hỏi về việc đưa tài liệu lên `develop` nằm ở mục Open Questions, câu Q1.
+- Story không phụ thuộc item Jira nào.
+- Tài liệu của Epic không có trên `develop` hay trên nhánh Story. Mọi agent đọc chúng từ nhánh `feature/DEMO-11-spec` bằng `git show` (quyết định 9). Story sang ready khi plan được duyệt.
 
 ### Phase 1: Server
 - [ ] `<STORY-KEY>`: Áp mã giảm giá trên trang giỏ hàng (Story: AC1–AC11, S1)
@@ -348,7 +353,7 @@ Phần của Sub-task FE. Test và server dựa vào các tên dưới đây, n�
   - bố cục theo cỡ màn hình của S1.
 - File code (1): `src/page.ts`. Gồm form, trường ẩn, [5], [7], CSS `flex-wrap` của hàng [3] [4], màu chữ lỗi, và viền ô khi có lỗi.
 - File test:
-  - `src/page.test.ts`: form và nút; dòng giảm giá; hai thông báo; escape mã trong thông báo và trong `value`; giỏ trống không có form; giỏ 55.000 ₫ có thêm dòng "-5.500 ₫";
+  - `src/page.test.ts`: form và nút; dòng giảm giá; hai thông báo; escape mã trong thông báo và trong `value`; giỏ trống không có form; giỏ 55.000 ₫ có thêm dòng "-5.500 ₫"; giỏ có tạm tính 5 ₫ áp `GIAM10` có dòng giảm giá "0 ₫", không có dấu trừ (Q2);
   - `src/server.test.ts`: `POST /` trả dòng giảm giá và thông báo đúng;
   - `e2e/coupon.spec.ts`: AC1–AC8 trong `describe` DEMO-11. Tìm ô bằng nhãn "Mã giảm giá", nút bằng role, và đọc kết quả theo `data-testid`.
 - Kiểm tay:
@@ -376,14 +381,12 @@ npm run test:e2e        # AC1–AC11 of DEMO-11, AC1 and AC2 of DEMO-10
 | Sau 400, 403, 404 hay 405 cho một request có body, Node đọc rồi bỏ body để giữ kết nối | Low | [Inference] Tôi suy ra từ lần chạy 413 không có `Connection: close`, khi Node đọc rồi bỏ 5 MB. Node không giữ phần body đó trong bộ nhớ, và server chỉ nghe `127.0.0.1`. Chấp nhận: theo SPEC, chỉ 413 đóng kết nối. |
 | `autofocus` không chạy dưới CSP của trang | Low | `fe-dev` kiểm trên Chrome. Không chạy thì bỏ, giữ ARIA (design, S1.3). |
 | Bảng [2] tràn ngang ở 320 px | Low | Theo design S1.2, `ba` tạo Task riêng; Story không sửa bảng. |
+| Một agent tìm tài liệu trên nhánh Story hay trên `develop` và không thấy, vì tài liệu chỉ có trên `feature/DEMO-11-spec` | Low | Quyết định 9 ghi lệnh `git show` để đọc tài liệu. `ba` chép lệnh này vào mô tả của Story. |
 
 ## Open Questions
 
-- **Q1. Đưa SPEC, design, plan và ADR lên `develop` thế nào?**
-  - Nhánh `feature/DEMO-11-spec` chưa merge vào `develop`. Ngày 2026-10-31, `develop` chưa có `docs/specs/DEMO-11/`. Vì vậy nhánh Story tách từ `develop` sẽ không có các file này.
-  - Đề xuất: sau gate ②, `sa` mở một PR chỉ chứa tài liệu, từ `feature/DEMO-11-spec` vào `develop`, và PR đó merge trước khi Story sang ready.
-  - Tới lúc đó, `be-dev` và `fe-dev` đọc tài liệu trên nhánh `feature/DEMO-11-spec`, qua link trên Epic.
-- **Q2. Số tiền giảm bằng 0 hiện thế nào?**
-  - Trường hợp này chỉ xảy ra khi `GIAM10` gặp tạm tính dưới 10 ₫, nên giỏ hàng mẫu không gặp.
-  - `formatMoney(-0)` cho "-0 ₫": tôi đã chạy trên Node 24.17.0.
-  - Đề xuất: dòng [7] vẫn hiện, với giá trị "0 ₫" không có dấu trừ. `fe-dev` làm theo đề xuất này, trừ khi bạn chọn khác.
+Không còn câu hỏi mở.
+
+- Q1 và Q2 được trả lời ngày 2026-10-31, thay người duyệt.
+- Q1 thành quyết định 9 của mục Architecture Decisions và đoạn đầu của mục Task List: tài liệu ở lại trên `feature/DEMO-11-spec`, không có PR tài liệu, và các agent đọc tài liệu bằng `git show`.
+- Q2 thành dòng [7] của bảng markup S1 và một test của Sub-task FE: số tiền giảm bằng 0 hiện "0 ₫", không có dấu trừ.
