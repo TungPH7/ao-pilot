@@ -31,9 +31,10 @@ stages:
     name: "Viết SPEC cho Epic"
     roles: [ba, ux, sa]
     lead: ba
+    note: "ux viết design khi Epic đụng tới giao diện"
     input: "Epic ở new"
     outputs:
-      artifacts: [spec]
+      artifacts: [spec, design]
     gate: spec-approval
   - id: plan
     name: "Lập plan, tạo Story/Task"

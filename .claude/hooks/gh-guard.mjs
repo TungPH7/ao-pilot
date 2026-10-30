@@ -1,7 +1,9 @@
 // PreToolUse hook for Bash, Read, Edit, Write and NotebookEdit (quality-gates spec section 2.7): refuses agents the ways
-// around the quality gates. The logic is checkAgentCall in lib/quality/commands.mjs. Allows by printing nothing;
-// refuses with permissionDecision "deny" and the reason.
+// around the quality gates, and, when the kit copy has agents/roster.yaml, what a role may not do (agent-roster spec
+// 2.10). The logic is checkAgentCall in lib/quality/commands.mjs. Allows by printing nothing; refuses with
+// permissionDecision "deny" and the reason.
 // The kit is in .ai-orchestrator/ of the project, or in AO_KIT_DIR.
+import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -18,7 +20,9 @@ try {
   const { readContract } = await load('lib/contract.mjs');
   const { readGates } = await load('lib/quality/gates.mjs');
   const { checkAgentCall } = await load('lib/quality/commands.mjs');
-  decision = checkAgentCall(input, { gates: readGates(join(kit, 'quality')), contract: readContract(join(kit, 'contract')), projectDir });
+  const { readRoster } = await load('lib/agents/roster.mjs');
+  const roster = existsSync(join(kit, 'agents', 'roster.yaml')) ? readRoster(join(kit, 'agents')) : undefined;
+  decision = checkAgentCall(input, { gates: readGates(join(kit, 'quality')), contract: readContract(join(kit, 'contract')), projectDir, roster });
 } catch (error) {
   // Without the kit, refuse an agent's git and gh commands, the ones this hook exists for, so other tools keep working.
   const risky = Boolean(input.agent_type) && input.tool_name === 'Bash' && /\b(?:git|gh)\b/.test(input.tool_input?.command ?? '');

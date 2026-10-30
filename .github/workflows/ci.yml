@@ -22,7 +22,7 @@ env:
   BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
 
 jobs:
-  # Conventions, suppressions and lowered thresholds of a PR, and npm audit (scripts/check-policy.mjs).
+  # Conventions, suppressions, lowered thresholds and design.md files of a PR, and npm audit (scripts/check-policy.mjs).
   policy:
     runs-on: ubuntu-latest
     steps:

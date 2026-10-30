@@ -18,6 +18,19 @@ export function checkConventions({ branch, base, commits, title }) {
   return problems;
 }
 
+// The design.md files the policy job checks (agent-roster spec 2.8): each docs/specs/<EPIC-KEY>/design.md the PR adds or
+// changes, and the one next to a design/ folder where the PR adds, changes or deletes an image, when it still exists.
+// changes: [{ status, path }] from `git diff --name-status --no-renames`; exists tells whether a path is in the PR head.
+export function designFilesToCheck(changes, exists) {
+  const files = new Set();
+  for (const { status, path } of changes) {
+    if (/^docs\/specs\/[^/]+\/design\.md$/.test(path) && status !== 'D') files.add(path);
+    const folder = path.match(/^(docs\/specs\/[^/]+)\/design\/.+$/)?.[1];
+    if (folder && exists(`${folder}/design.md`)) files.add(`${folder}/design.md`);
+  }
+  return [...files];
+}
+
 // report: the JSON of `npm audit --json`. Each advisory counts once, however many packages pull it in; packages that
 // are only vulnerable through another one list its name instead of an advisory.
 export function auditProblems(report, { audit_level: level, exceptions }, today) {
