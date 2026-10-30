@@ -77,3 +77,28 @@ test('without a coupon the page is the page of GET /', () => {
 test('an empty cart has no total to take a coupon off', () => {
   assert.equal(renderCart([], applyCoupon({ code: 'GIAM10', applied: '' })), renderCart([]));
 });
+
+test('a cart has a coupon form posting to /, with the labelled field [3] and the button [4], between the table and the totals', () => {
+  const html = renderCart(items);
+  assert.match(html, /<form method="post" action="\/">/);
+  assert.match(html, /<label for="coupon-code">Mã giảm giá<\/label>/);
+  assert.match(html, /<input type="text" id="coupon-code" name="code" maxlength="64" value="">/);
+  assert.match(html, /<button type="submit">Áp dụng<\/button>/);
+  assert.ok(html.indexOf('</table>') < html.indexOf('<form'), 'the form comes after the table');
+  assert.ok(html.indexOf('</form>') < html.indexOf('<dl>'), 'the form comes before the totals');
+});
+
+test('the coupon field is not required, so the server checks it and every browser shows the same message', () => {
+  assert.doesNotMatch(renderCart(items), /required/);
+});
+
+test('without a coupon or a message the field has no error attributes and the form has no hidden field', () => {
+  const html = renderCart(items);
+  assert.doesNotMatch(html, /autofocus|aria-invalid|aria-describedby/);
+  assert.doesNotMatch(html, /type="hidden"|name="applied"/);
+  assert.doesNotMatch(html, /data-testid="coupon-error"|data-testid="discount"/);
+});
+
+test('an empty cart has no coupon form', () => {
+  assert.doesNotMatch(renderCart([]), /<form|coupon-code|Áp dụng/);
+});

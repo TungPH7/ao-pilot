@@ -40,6 +40,16 @@ ${body}
 `;
 }
 
+// The coupon form of S1: field [3] and button [4]. It posts to / as application/x-www-form-urlencoded, the default of
+// a form. The field is not required, so the server checks it and every browser shows the same message.
+function couponForm(): string {
+  return `<form method="post" action="/">
+<label for="coupon-code">Mã giảm giá</label>
+<input type="text" id="coupon-code" name="code" maxlength="64" value="">
+<button type="submit">Áp dụng</button>
+</form>`;
+}
+
 function cartTable(items: CartItem[], coupon: CouponState): string {
   const rows = items
     .map((item) => `<tr data-testid="cart-line"><td>${escapeHtml(item.name)}</td><td>${formatMoney(item.price)}</td><td>${item.quantity}</td><td>${formatMoney(item.price * item.quantity)}</td></tr>`)
@@ -54,6 +64,7 @@ function cartTable(items: CartItem[], coupon: CouponState): string {
 ${rows}
 </tbody>
 </table>
+${couponForm()}
 <dl>
 <dt>Tạm tính</dt><dd data-testid="subtotal">${formatMoney(subtotal)}</dd>
 <dt>Phí vận chuyển</dt><dd data-testid="shipping">${fee === 0 ? 'Miễn phí' : formatMoney(fee)}</dd>
