@@ -280,16 +280,16 @@ Phần của Sub-task FE. Test và server dựa vào các tên dưới đây, n�
 
 ## Task List
 
-`ba` tạo Story và hai Sub-task trên Jira theo plan này, rồi thay `<STORY-KEY>`, `<BE-KEY>`, `<FE-KEY>` bằng key thật.
+`ba` đã tạo Story và hai Sub-task trên Jira theo plan này ngày 2026-10-31: Story DEMO-12, Sub-task BE DEMO-13, Sub-task FE DEMO-14. Cả ba ở trạng thái đầu của workflow (Story ở New, Sub-task ở To Do).
 
-- Nhánh của Story là `feature/<STORY-KEY>-coupon-code`, tách từ `develop`. Nhánh `develop` đã có DEMO-10 (commit `6c25b8b`; tôi kiểm ngày 2026-10-31).
+- Nhánh của Story là `feature/DEMO-12-coupon-code`, tách từ `develop`. Nhánh `develop` đã có DEMO-10 (commit `6c25b8b`; tôi kiểm ngày 2026-10-31).
 - Hai Sub-task commit lên nhánh này, BE trước.
 - Story không phụ thuộc item Jira nào.
 - Tài liệu của Epic không có trên `develop` hay trên nhánh Story. Mọi agent đọc chúng từ nhánh `feature/DEMO-11-spec` bằng `git show` (quyết định 9). Story sang ready khi plan được duyệt.
 
 ### Phase 1: Server
-- [ ] `<STORY-KEY>`: Áp mã giảm giá trên trang giỏ hàng (Story: AC1–AC11, S1)
-- [ ] `<BE-KEY>`: BE: tính giảm giá và bảo vệ `POST /` bằng `Host`, `Origin` và cỡ body
+- [ ] DEMO-12: Áp mã giảm giá trên trang giỏ hàng (Story: AC1–AC11, S1)
+- [ ] DEMO-13: BE: tính giảm giá và bảo vệ `POST /` bằng `Host`, `Origin` và cỡ body
 
 ### Checkpoint: Server
 - [ ] `npm run lint`, `npm run typecheck` và `npm test` xanh.
@@ -298,7 +298,7 @@ Phần của Sub-task FE. Test và server dựa vào các tên dưới đây, n�
 - [ ] Kiểm tay, không commit: với một listener ném lỗi, `npm test` báo fail và kết thúc.
 
 ### Phase 2: Trang
-- [ ] `<FE-KEY>`: FE: form mã giảm giá, dòng giảm giá và thông báo lỗi trên S1
+- [ ] DEMO-14: FE: form mã giảm giá, dòng giảm giá và thông báo lỗi trên S1
 
 ### Checkpoint: Story
 - [ ] E2E của AC1–AC11 (DEMO-11) và của AC1, AC2 (DEMO-10) pass trên Chrome.
