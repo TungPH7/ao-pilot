@@ -134,7 +134,7 @@ Bổ sung cho mục Technical requirements và mục Boundaries:
   - Port hợp lệ là port server thật sự nghe, kể cả khi `listen(0)` chọn port, như trong `src/server.test.ts`.
   - So sánh nguyên chuỗi với `127.0.0.1:<port>` và `localhost:<port>`, không chuẩn hóa.
   - Request có hơn một header `Host` nhận 400. Node 24.17.0 giữ `Host` đầu tiên và bỏ các `Host` sau, nên `request.headers.host` không đủ để phát hiện; `request.rawHeaders` cho biết số header `Host`. [Unverified] RFC 9112 mục 3.2 đòi 400 cho trường hợp này; tôi trích từ trí nhớ, chưa mở RFC.
-  - Request HTTP/1.1 không có `Host`: xem Q8.
+  - Request HTTP/1.1 không có `Host` nhận 400 "Bad request" từ code của server, như mọi `Host` sai khác: `text/plain; charset=utf-8`, có `nosniff`. Vì vậy server được tạo với `createServer({ requireHostHeader: false })`. Không có tùy chọn này, Node 24.17.0 tự trả 400 trước khi gọi handler, không có `Content-Type`, không có `nosniff` và body rỗng. Với tùy chọn này, handler nhận request và `request.headers.host` là `undefined`. Quyết định Q8, ngày 2026-10-31.
 - `Origin` được so sánh nguyên chuỗi. Với hai header `Origin`, Node 24.17.0 nối chúng thành một chuỗi như `"http://127.0.0.1:<port>, http://evil.example"`. Chuỗi đó không trùng, nên request nhận 403 mà không cần code riêng; integration test giữ trường hợp này.
 - Response 200 của `POST /` có cùng header với `GET /`: `Content-Type: text/html; charset=utf-8`, CSP và `X-Content-Type-Options: nosniff`.
 - Danh sách mã không phải bí mật: nó nằm trong code và trong README. Vì vậy Epic không giới hạn tần suất request và không cần so sánh mã trong thời gian hằng. [Inference] Epic không có thanh toán, nên đoán được mã không mang lại tiền.
@@ -165,7 +165,7 @@ API có sẵn của Node mà Epic dùng lần đầu, không phải dependency m
 |---|---|
 | `URLSearchParams` | Đọc body `application/x-www-form-urlencoded` của `POST /` |
 | `request.rawHeaders` | Đếm số header `Host` của request |
-| `http.createServer({ requireHostHeader: false })` | Cho handler tự trả 400 khi request HTTP/1.1 không có `Host`, nếu Q8 được duyệt |
+| `http.createServer({ requireHostHeader: false })` | Cho code của server tự trả 400 "Bad request" khi request HTTP/1.1 không có `Host` (quyết định Q8) |
 | `AbortSignal.timeout()` | Timeout của `fetch` trong `src/server.test.ts` |
 
 ## Commands
@@ -250,7 +250,7 @@ Mọi Sub-task viết theo TDD: test đỏ trước, code sau.
   - body mã hóa sai, như `code=%FF`, nhận 200 với "Mã giảm giá không hợp lệ.";
   - hai header `Host` → 400; hai header `Origin` → 403;
   - response 200 của `POST /` có cùng header với `GET /`;
-  - request HTTP/1.1 không có `Host`, theo câu trả lời của Q8.
+  - request HTTP/1.1 không có `Host` → 400 `text/plain; charset=utf-8`, có `nosniff`, body "Bad request" (Q8).
 
 **E2E test** (`e2e/coupon.spec.ts`, Playwright với Chrome): mỗi AC từ AC1 đến AC11 có một test, tên bắt đầu bằng mã AC.
 
@@ -302,11 +302,7 @@ Các điều kiện sau cộng thêm vào Epic DoD. Repo chưa có `docs/sdlc.md
 
 ## Open Questions
 
-Các câu Q1–Q7 của bản trước được trả lời ngày 2026-10-31, thay người duyệt. Các câu trả lời đã thành quyết định trong các mục Scope, Business rules, User stories, Technical requirements, Testing Strategy và Boundaries.
+Không còn câu hỏi mở.
 
-Câu hỏi của `sa`, cần bạn trả lời trước gate ① spec-approval:
-
-- **Q8.** Request HTTP/1.1 không có `Host` nhận câu trả lời 400 ở dạng nào?
-  - Bối cảnh: trên Node 24.17.0, Node tự trả 400 cho request này trước khi gọi handler. Câu trả lời đó không có `Content-Type`, không có `X-Content-Type-Options: nosniff`, và body rỗng. Nó vẫn đạt AC11, nhưng trái với mục Technical requirements: câu trả lời 400 là `text/plain; charset=utf-8`, có `nosniff` và body cố định.
-  - Đề xuất: tạo server với `createServer({ requireHostHeader: false })`, để handler tự trả 400 "Bad request" như với mọi `Host` sai. Tôi đã chạy thử trên Node 24.17.0: với tùy chọn này, handler nhận request và `request.headers.host` là `undefined`. `@types/node` 24.19.2 có khai báo tùy chọn này.
-  - Cách khác: giữ câu trả lời 400 của Node cho riêng trường hợp này, và SPEC ghi đây là ngoại lệ của mục Technical requirements.
+- Các câu Q1–Q7 của bản trước được trả lời ngày 2026-10-31, thay người duyệt. Các câu trả lời đã thành quyết định trong các mục Scope, Business rules, User stories, Technical requirements, Testing Strategy và Boundaries.
+- Câu Q8 của `sa` được trả lời ngày 2026-10-31, thay người duyệt: server được tạo với `createServer({ requireHostHeader: false })`, để code của server trả 400 "Bad request" cho request HTTP/1.1 không có `Host`. Câu trả lời đã thành quyết định trong mục Non-functional requirements (Security), Tech Stack và Testing Strategy.
