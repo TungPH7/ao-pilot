@@ -28,6 +28,8 @@ jobs:
   deploy:
     needs: audit
     runs-on: ubuntu-latest
+    # A hung step stops after 10 minutes instead of holding the runner for the default 360.
+    timeout-minutes: 10
     environment: ${{ inputs.environment || (github.ref_name == 'develop' && 'development' || 'staging') }}
     steps:
       - run: echo "Pretend to deploy ${{ github.sha }} of ${{ github.ref_name }}"
