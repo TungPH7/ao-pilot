@@ -1,4 +1,6 @@
-import { createServer, type Server } from 'node:http';
+import { createServer, type IncomingMessage, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { applyCoupon } from './coupon.ts';
 import { renderCart, type CartItem } from './page.ts';
 
 // The cart the page shows until the cart has a store: two lines, a subtotal of 39.000 ₫, so shipping is charged.
@@ -15,20 +17,77 @@ const PAGE_HEADERS = {
 };
 const TEXT_HEADERS = { 'Content-Type': 'text/plain; charset=utf-8', 'X-Content-Type-Options': 'nosniff' };
 
-// The cart page at / for GET and HEAD. Any other path is 404, any other method 405. The path is the request target up
-// to its query string, read as is: `//` or `//host/` is not /. The page is made once, so a cart it cannot show
-// (total() throws a RangeError) fails here and not on a request.
+// The Host of the request when it names this server, otherwise undefined: exactly one Host header, equal as is to
+// 127.0.0.1:<port> or localhost:<port> (AC11, ADR-0001). Node keeps only the first of several Host headers in
+// request.headers, so they are counted in rawHeaders.
+function ownHost(request: IncomingMessage, port: number): string | undefined {
+  const count = request.rawHeaders.filter((value, index) => index % 2 === 0 && value.toLowerCase() === 'host').length;
+  const host = request.headers.host;
+  return count === 1 && (host === `127.0.0.1:${port}` || host === `localhost:${port}`) ? host : undefined;
+}
+
+// The cart page at /: GET and HEAD answer the page made once, POST / the page with the coupon of its form. The
+// checks run in the order of the plan: a Host that does not name this server is 400, before anything else (AC11);
+// another path is 404; another method 405; a POST without the Origin of this server 403, before its body is read
+// (AC9); a body over BODY_LIMIT bytes 413 (AC10). The path is the request target up to its query string, read as is:
+// `//` or `//host/` is not /. A cart the page cannot show (total() throws a RangeError) fails here and not on a
+// request, and discount() does not throw on a subtotal that total() returned.
 export function cartServer(items: CartItem[] = SAMPLE_CART): Server {
   const page = renderCart(items);
-  return createServer((request, response) => {
+  // requireHostHeader: false lets the server answer an HTTP/1.1 request without a Host with its own 400, as text.
+  const server = createServer({ requireHostHeader: false }, (request, response) => {
+    const host = ownHost(request, (server.address() as AddressInfo).port);
     const path = (request.url ?? '/').split('?', 1)[0];
-    if (path !== '/') {
+    if (host === undefined) {
+      response.writeHead(400, TEXT_HEADERS).end('Bad request');
+    } else if (path !== '/') {
       response.writeHead(404, TEXT_HEADERS).end('Not found');
-    } else if (request.method !== 'GET' && request.method !== 'HEAD') {
-      response.writeHead(405, { ...TEXT_HEADERS, Allow: 'GET, HEAD' }).end('Method not allowed');
-    } else {
+    } else if (request.method === 'GET' || request.method === 'HEAD') {
       response.writeHead(200, PAGE_HEADERS).end(request.method === 'HEAD' ? undefined : page);
+    } else if (request.method !== 'POST') {
+      response.writeHead(405, { ...TEXT_HEADERS, Allow: 'GET, HEAD, POST' }).end('Method not allowed');
+    } else if (request.headers.origin !== `http://${host}`) {
+      // Two Origin headers reach here joined by a comma, so they are not equal either (AC9).
+      response.writeHead(403, TEXT_HEADERS).end('Forbidden');
+    } else {
+      readBody(
+        request,
+        (body) => {
+          // Any Content-Type is read as a form; bytes that are not UTF-8 become U+FFFD, an unknown code (plan, POST /).
+          const form = new URLSearchParams(body);
+          const coupon = applyCoupon({ code: form.get('code') ?? '', applied: form.get('applied') ?? '' });
+          response.writeHead(200, PAGE_HEADERS).end(renderCart(items, coupon));
+        },
+        // Connection: close lets Node drop the rest of the body instead of reading it to keep the connection (AC10).
+        () => response.writeHead(413, { ...TEXT_HEADERS, Connection: 'close' }).end('Payload too large'),
+      );
     }
+  });
+  return server;
+}
+
+const BODY_LIMIT = 1024; // bytes of a POST / body
+
+// Calls done with the body, or tooLarge once the body passes BODY_LIMIT bytes, keeping no more than that. A
+// Content-Length over the limit is refused before any byte is read. Reads with data and end events, not for await,
+// so a client that drops the connection mid-body ends only its own request: the request emits no error without a
+// listener, and end never comes.
+function readBody(request: IncomingMessage, done: (body: string) => void, tooLarge: () => void): void {
+  if (Number(request.headers['content-length'] ?? 0) > BODY_LIMIT) return tooLarge();
+  const chunks: Buffer[] = [];
+  let size = 0;
+  request.on('data', (chunk: Buffer) => {
+    if (size > BODY_LIMIT) return;
+    size += chunk.length;
+    if (size > BODY_LIMIT) {
+      chunks.length = 0;
+      tooLarge();
+    } else {
+      chunks.push(chunk);
+    }
+  });
+  request.on('end', () => {
+    if (size <= BODY_LIMIT) done(Buffer.concat(chunks).toString('utf8'));
   });
 }
 
