@@ -1,4 +1,5 @@
 # CI of a project (ai-orchestrator, quality-gates spec section 2.4): four jobs, one check each. jira-sync watches this
+# dev-workflow T2 probe (DEMO-18): a workflow change pushed by an App token.
 # workflow by its name, CI. merge-gate, audit and the ruleset require the four jobs, which .ai-orchestrator/quality/gates.yaml
 # lists under `checks`. The project provides the npm scripts lint, typecheck, test:coverage (writing lcov) and build.
 name: CI
