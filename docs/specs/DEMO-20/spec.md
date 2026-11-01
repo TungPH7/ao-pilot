@@ -25,7 +25,7 @@ Trong phạm vi (theo Epic):
 Ngoài phạm vi:
 
 - Theo Epic: lưu giỏ giữa các lần tải trang, hoàn tác, đổi số lượng, đăng nhập, thanh toán.
-- Hỏi xác nhận trước khi xóa, và thông báo sau khi xóa (Q1, Q2).
+- Hỏi xác nhận trước khi xóa, và thông báo sau khi xóa (quyết định Q1 và Q2, mục Business rules).
 - Thêm lại một dòng đã xóa. Mở lại `/` bằng `GET` thì trang hiện lại giỏ mẫu đủ hai dòng, vì giỏ không được lưu.
 
 ### Business rules
@@ -54,7 +54,11 @@ Tạm tính 39.000 ₫, phí vận chuyển 3.000 ₫, tổng cộng 42.000 ₫.
   - thông báo lỗi mã của lần trước, nếu có, biến mất;
   - mã đang áp vẫn giữ.
 - Nhấn Enter trong ô mã luôn là "Áp dụng", không bao giờ xóa một dòng (AC9).
-- Không hỏi xác nhận trước khi xóa (Q1), không hiện thông báo sau khi xóa (Q2).
+- Không hỏi xác nhận trước khi xóa. Quyết định Q1, ngày 2026-11-01:
+  - trang không có script, nên hỏi xác nhận cần thêm một trang hoặc một bước `POST` nữa;
+  - giỏ không được lưu, nên mở lại `/` là có lại giỏ mẫu.
+- Không hiện thông báo sau khi xóa: dòng biến mất và các con số đổi là đủ cho người nhìn thấy. Quyết định Q2, ngày 2026-11-01.
+  - Nếu `ux` thấy người dùng trình đọc màn hình cần một câu báo, `ux` đề xuất câu chữ trong `design.md`, và bạn duyệt câu đó ở gate ①.
 
 Câu chữ trên trang. `ux` viết `design.md` theo đúng câu chữ này:
 
@@ -64,7 +68,11 @@ Câu chữ trên trang. `ux` viết `design.md` theo đúng câu chữ này:
 
 ### User stories
 
-Mọi AC dùng giỏ hàng mẫu ở trên, trừ AC4: AC4 dùng một giỏ riêng có tạm tính 55.000 ₫, vì giỏ mẫu luôn dưới ngưỡng miễn phí vận chuyển (Q3).
+Mọi AC dùng giỏ hàng mẫu ở trên, trừ AC4. Quyết định Q3, ngày 2026-11-01:
+
+- Giỏ mẫu luôn dưới ngưỡng 50.000 ₫, nên xóa trên giỏ mẫu không bao giờ đổi phí vận chuyển.
+- Vì vậy AC4 dùng một giỏ riêng có tạm tính 55.000 ₫, mà test E2E tự khởi động bằng `cartServer(items)` (mục Testing Strategy).
+- `SAMPLE_CART` không đổi, vì đổi nó làm hỏng E2E của DEMO-10 và DEMO-11.
 
 Các số tiền dưới đây, tôi đã tính bằng `renderCart` của `src/page.ts` trên Node 24.17.0, ngày 2026-11-01. Số tiền giảm có dấu trừ, như "-2.400 ₫" của DEMO-11.
 
@@ -202,7 +210,7 @@ Mọi Story và Sub-task viết theo TDD: test đỏ trước, code sau.
 
 - Mọi test nằm trong `test.describe('DEMO-20', …)`, để báo cáo QA phân biệt chúng với các test `AC1 …` của DEMO-10 và DEMO-11.
 - AC1–AC9 đi qua trang: bấm nút "Xóa" của dòng, tìm theo vai trò và tên, rồi đọc các phần tử theo `data-testid`.
-- AC4 cần giỏ 55.000 ₫ nên test tự khởi động `cartServer(items)` trên port 0 của 127.0.0.1 rồi mở Chrome tới đó. Tôi đã chạy thử cách này trong `.ai/ba/demo-20/probe/` ngày 2026-11-01 (Q3).
+- AC4 cần giỏ 55.000 ₫ nên test tự khởi động `cartServer(items)` trên port 0 của 127.0.0.1 rồi mở Chrome tới đó. Tôi đã chạy thử cách này trong `.ai/ba/demo-20/probe/` ngày 2026-11-01 (quyết định Q3).
 - AC10 và AC11 gửi request HTTP thô bằng `node:http`, như AC9–AC11 của DEMO-11 trong `e2e/coupon.spec.ts`.
 - Theo README, E2E chưa chạy trong CI; `qa` chạy chúng trên máy.
 
@@ -244,15 +252,7 @@ Các điều kiện sau cộng thêm vào Epic DoD của `.ai-orchestrator/docs/
 
 ## Open Questions
 
-Không ai trả lời trong phiên này, nên mỗi câu có đề xuất. SPEC đã viết theo đề xuất; bạn đổi câu nào thì `ba` sửa SPEC theo.
+Không còn câu hỏi mở.
 
-- **Q1. Có hỏi xác nhận trước khi xóa không?**
-  - Đề xuất: không. Trang không có script, nên hỏi xác nhận cần thêm một trang hoặc một bước `POST` nữa.
-  - Giỏ không được lưu: mở lại `/` là có lại giỏ mẫu.
-- **Q2. Có hiện thông báo sau khi xóa, như "Đã xóa Bút bi khỏi giỏ hàng." không?**
-  - Đề xuất: không. Dòng biến mất và các con số đổi là đủ cho người nhìn thấy.
-  - Nếu `ux` thấy người dùng trình đọc màn hình cần một câu báo, `ux` đề xuất câu chữ trong `design.md`, và bạn duyệt ở gate ①.
-- **Q3. Kiểm việc tính lại phí vận chuyển trên giỏ nào?**
-  - Giỏ mẫu luôn dưới ngưỡng 50.000 ₫, nên xóa trên giỏ mẫu không bao giờ đổi phí vận chuyển.
-  - Đề xuất: AC4 dùng giỏ riêng 55.000 ₫ mà test E2E tự khởi động bằng `cartServer(items)`, và `SAMPLE_CART` không đổi.
-  - Lý do: đổi `SAMPLE_CART` làm hỏng E2E của DEMO-10 và DEMO-11.
+- Các câu Q1–Q3 của bản trước được trả lời ngày 2026-11-01: bạn chọn đề xuất của `ba` ở cả ba câu.
+- Các câu trả lời đã thành quyết định trong các mục Scope, Business rules, User stories và Testing Strategy.
