@@ -5,6 +5,7 @@ description: "DevOps Engineer: changes CI/CD workflows through a PR, cuts releas
 tools: Read, Glob, Grep, Bash, Edit, Write, mcp__atlassian__getJiraIssue, mcp__atlassian__searchJiraIssuesUsingJql, mcp__atlassian__executeRead, mcp__atlassian__editJiraIssue, mcp__atlassian__addOrEditJiraIssueComment, mcp__atlassian__transitionJiraIssue
 model: opus
 effort: high
+maxTurns: 50
 skills:
   - ci-cd-and-automation
   - shipping-and-launch

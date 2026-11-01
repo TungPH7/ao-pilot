@@ -4,7 +4,8 @@
 import { extractKeys, parseBranch } from '../tracker/conventions.mjs';
 import { adfText, readChecks } from '../tracker/facts.mjs';
 import { raiseFlag } from '../tracker/sync.mjs';
-import { approved, protectedPaths, unmetConditions } from './merge-gate.mjs';
+import { docsPullRequest, readDocsFacts } from './docs-pr.mjs';
+import { approved, docsUnmet, docsVerdict, protectedPaths, unmetConditions } from './merge-gate.mjs';
 
 // The merged PR whose merge commit is `sha`, into `branch`; for a release branch also into develop, since a new
 // release branch is cut from a commit of develop. A PR that only contains the commit is not its merge.
@@ -15,9 +16,10 @@ export function mergedPull(pulls, sha, branch) {
 
 // facts: the commit `sha` and its `message`, the `branch` it is deployed from, `pull` (GET /pulls/{n} of the PR
 // mergedPull found, or null), that PR's `files`, `reviews` and the `checks` of its head commit, the `gates`, the slugs
-// of the two `apps`, and your logins (`approvers`). Returns { ok, pr, problems, keys }: keys are the work items to flag,
-// from the PR title, or from the commit header when there is no PR.
-export function decideAudit({ sha, branch, message, pull, files = [], reviews = [], checks, gates, apps, approvers }) {
+// of the two `apps`, your logins (`approvers`), and for a docs PR its `docs` facts as merge-gate reads them. Returns
+// { ok, pr, problems, keys }: keys are the work items to flag, from the PR title, or from the commit header when there
+// is no PR. A docs PR passes on the terms merge-gate merged it on (dev-workflow spec 2.4).
+export function decideAudit({ sha, branch, message, pull, files = [], reviews = [], checks, gates, apps, approvers, docs }) {
   const short = sha.slice(0, 7);
   if (!pull) {
     return result(null, [`${short} on ${branch} is not the merge of a PR into ${branch}: it was pushed without one`], extractKeys(message.split('\n', 1)[0]));
@@ -35,7 +37,12 @@ export function decideAudit({ sha, branch, message, pull, files = [], reviews = 
       ...(approved({ pr: pull, reviews, approvers, authorApproves: true }) ? [] : [`approval ${at}`]),
     ];
   } else {
-    missing = unmetConditions({ pr: pull, checks, reviews, gates, apps, approvers, authorApproves: true });
+    const verdict = docsVerdict({ pr: pull, files, gates, apps, docs });
+    if (verdict?.docs) missing = docsUnmet({ pr: pull, checks, reviews, verdict });
+    else {
+      missing = unmetConditions({ pr: pull, checks, reviews, gates, apps, approvers, authorApproves: true });
+      if (verdict && missing.length > 0) missing[missing.length - 1] += ` (${verdict.reason})`;
+    }
     const paths = protectedPaths(files, gates);
     const merger = pull.merged_by?.login;
     if (paths.length > 0 && !approvers.includes(merger)) problems.push(`PR #${pull.number} changes ${paths.join(', ')}, which only you merge, but ${merger} merged it`);
@@ -48,25 +55,30 @@ const result = (pr, problems, keys) => ({ ok: problems.length === 0, pr, problem
 
 // Reads the facts of commit `sha` on `branch`, decides, and prints the outcome. When the audit fails, every work item
 // of the project space it names is flagged, with a comment that says why, once per commit and branch. dryRun flags
-// nothing. Returns the decision and the keys flagged.
-export async function runAudit({ github, jira, mapping, space, sha, branch, gates, apps, approvers, dryRun = false, log = console.log }) {
+// nothing. `docs` ({ jira, passage }, a reading Jira client) reads the facts of a docs PR. Returns the decision and the
+// keys flagged.
+export async function runAudit({ github, jira, docs, mapping, space, sha, branch, gates, apps, approvers, dryRun = false, log = console.log }) {
   const { commit } = await github.get(`/commits/${sha}`);
   const listed = mergedPull(await github.getAll(`/commits/${sha}/pulls`), sha, branch);
   let facts = { pull: null };
+  let docsKey = null;
   if (listed) {
     // Only the PR itself says who merged it.
     const pull = await github.get(`/pulls/${listed.number}`);
+    const files = await github.getAll(`/pulls/${pull.number}/files`);
+    docsKey = docsPullRequest({ pr: pull, files, gates, apps });
     facts = {
       pull,
-      files: await github.getAll(`/pulls/${pull.number}/files`),
+      files,
       reviews: await github.getAll(`/pulls/${pull.number}/reviews`),
       checks: await readChecks(github, pull.head.sha),
+      docs: docsKey && docs ? { ...(await readDocsFacts({ github, jira: docs.jira, key: docsKey, sha: pull.head.sha })), passage: docs.passage } : undefined,
     };
   }
   const decision = decideAudit({ sha, branch, message: commit.message, ...facts, gates, apps, approvers });
   const short = sha.slice(0, 7);
   if (decision.ok) {
-    log(`audit passed: ${short} on ${branch} is the merge of PR #${decision.pr}, which met every gate`);
+    log(`audit passed: ${short} on ${branch} is the merge of PR #${decision.pr}${docsKey ? `, the docs PR of ${docsKey}` : ''}, which met every gate`);
     return { ...decision, flagged: [] };
   }
   log(`audit failed: ${short} on ${branch}`);

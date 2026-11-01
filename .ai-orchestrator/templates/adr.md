@@ -11,7 +11,9 @@ Keep headings in English and write the content in Vietnamese. Delete the guidanc
 
 ## Status
 
-<!-- Proposed | Accepted | Superseded by ADR-NNNN | Deprecated -->
+<!-- Proposed | Accepted | Superseded by ADR-NNNN | Deprecated
+An ADR written with the plan of an Epic reads "Proposed with the plan of <EPIC-KEY>; it takes effect when you approve
+the plan at gate ②". Nobody changes it to Accepted later: the Epic's state on Jira says whether the plan is approved. -->
 
 ## Date
 
@@ -49,7 +51,7 @@ Keep headings in English and write the content in Vietnamese. Delete the guidanc
 > **Epic:** DEMO-10 · **Jira:** https://example.atlassian.net/browse/DEMO-10
 
 ## Status
-Accepted
+Proposed with the plan of DEMO-10; it takes effect when you approve the plan at gate ②
 
 ## Date
 2026-11-03

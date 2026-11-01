@@ -16,7 +16,8 @@ PASS | FAIL | NOT TESTED
 
 ## Environment
 
-<!-- The QA environment of the item, as docs/sdlc.md routes it (development, staging or production), and its URL. -->
+<!-- The QA environment of the item, as .ai-orchestrator/docs/sdlc.md routes it (development, staging or production),
+and its URL. -->
 
 ## Commit
 

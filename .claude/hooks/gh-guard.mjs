@@ -4,6 +4,7 @@
 // permissionDecision "deny" and the reason.
 // The kit is in .ai-orchestrator/ of the project, or in AO_KIT_DIR.
 import { existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -22,7 +23,7 @@ try {
   const { checkAgentCall } = await load('lib/quality/commands.mjs');
   const { readRoster } = await load('lib/agents/roster.mjs');
   const roster = existsSync(join(kit, 'agents', 'roster.yaml')) ? readRoster(join(kit, 'agents')) : undefined;
-  decision = checkAgentCall(input, { gates: readGates(join(kit, 'quality')), contract: readContract(join(kit, 'contract')), projectDir, roster });
+  decision = checkAgentCall(input, { gates: readGates(join(kit, 'quality')), contract: readContract(join(kit, 'contract')), projectDir, roster, tempDir: tmpdir() });
 } catch (error) {
   // Without the kit, refuse an agent's git and gh commands, the ones this hook exists for, so other tools keep working.
   const risky = Boolean(input.agent_type) && input.tool_name === 'Bash' && /\b(?:git|gh)\b/.test(input.tool_input?.command ?? '');

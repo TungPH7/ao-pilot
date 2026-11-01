@@ -52,6 +52,16 @@ protected_paths:
   - { path: ".githooks/**" }
   - { path: ".claude/**" }
   - { path: ".ai-orchestrator/**" }
+  - { path: ".mcp.json" }
+
+# The docs PR of an Epic (dev-workflow spec 2.4): every file it changes is under these paths, its head is this branch,
+# ao-dev opened it, and <EPIC> is an Epic. merge-gate merges it without reviews or approval once the Epic is past this
+# gate and the CI run of its head started before you approved; audit takes its merge commit on the same terms. Rule Q5
+# keeps the paths in docs/, away from the protected paths, and the gate a gate of the contract.
+docs_pull_requests:
+  paths: ["docs/specs/<EPIC>/**", "docs/adr/**"]
+  branch: "feature/<EPIC>-spec"
+  gate: plan-approval
 
 # The GitHub Apps of the agents: the variables that name each App, the roles that use it, and the ao-pr.mjs commands
 # those roles may run with it.

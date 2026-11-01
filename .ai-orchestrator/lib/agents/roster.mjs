@@ -100,6 +100,9 @@ function checkTransitions(roster, contract) {
     .map(([id]) => ({ rule: 'A3', path: `roles.${id}.jira`, message: `${id} is the actor of no transition, so it may not move items` }));
 }
 
+// The folders of kit/.claude/skills/ that are the kit's own commands, not vendored skills (dev-workflow spec 2.9).
+export const KIT_SKILL_PREFIX = 'ao-';
+
 // Rule A4: every preloaded skill is a vendored skill, and vendored names are unique. The vendored folders are checked
 // when they exist (T9).
 function checkSkills(roster) {
@@ -107,6 +110,9 @@ function checkSkills(roster) {
   const errors = [];
   const twice = [...new Set(names.filter((name, index) => names.indexOf(name) !== index))];
   if (twice.length > 0) errors.push({ rule: 'A4', path: 'vendored_skills', message: `${twice.join(', ')} vendored twice` });
+  // kit/.claude/skills/ao-* are the kit's own commands (dev-workflow T13): a vendored skill there would overwrite one.
+  const kitNamed = names.filter((name) => name.startsWith(KIT_SKILL_PREFIX));
+  if (kitNamed.length > 0) errors.push({ rule: 'A4', path: 'vendored_skills', message: `${kitNamed.join(', ')} uses the prefix ${KIT_SKILL_PREFIX} of the kit's commands` });
   for (const [id, { skills }] of Object.entries(roster.roles)) {
     const missing = skills.filter((skill) => !names.includes(skill));
     if (missing.length > 0) errors.push({ rule: 'A4', path: `roles.${id}.skills`, message: `${missing.join(', ')} not a vendored skill` });

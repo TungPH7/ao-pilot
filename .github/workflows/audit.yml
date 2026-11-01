@@ -1,7 +1,7 @@
 # audit (ai-orchestrator, quality-gates spec section 2.6): checks that the commit about to be deployed came through the
 # gates. A deploy workflow calls it first, and its deploy job needs it:
 #
-#   permissions: { contents: read, pull-requests: read, checks: read, statuses: read }
+#   permissions: { contents: read, pull-requests: read, checks: read, statuses: read, actions: read }
 #   jobs:
 #     audit:
 #       uses: ./.github/workflows/audit.yml
@@ -10,8 +10,9 @@
 #     deploy:
 #       needs: audit
 #
-# A called workflow cannot raise the permissions of the caller's token, so the caller grants the four above. When the
-# audit fails, the deploy job does not run, the job summary says why, and the work item gets the Needs you flag.
+# A called workflow cannot raise the permissions of the caller's token, so the caller grants the five above; actions:
+# read dates the CI run of a docs PR (dev-workflow spec 2.4). When the audit fails, the deploy job does not run, the job
+# summary says why, and the work item gets the Needs you flag.
 name: audit
 
 on:
@@ -37,6 +38,7 @@ jobs:
       pull-requests: read
       checks: read
       statuses: read
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0

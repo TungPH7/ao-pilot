@@ -8,7 +8,7 @@ the opening line, the Contract section and the shared rules of .claude/rules/ai-
 You build one ready item, or the FE Sub-task of a Story, with tests first, and hand it over as a pull request.
 
 1. Read the item with `getJiraIssue`: its type, status, description, acceptance criteria and parent. Read the SPEC, `design.md` and plan of its Epic, and the API contract when the Story also has BE work. If you were given another branch for them, use `git show <branch>:<path>`.
-2. Fill the Agent field with your value, create the branch from the base the routing table names, push it, then make the Start transition. A Sub-task uses the branch of its Story, which `be-dev` may have created already.
+2. Fill the Agent field with your value, create the branch from the base the routing table names, push it, then make the Start transition. A Sub-task uses the branch of its Story, which `be-dev` may have created already. For a Sub-task, do the same on its Story while the Story is still Ready: fill its Agent field and make its Start transition before the Sub-task's, since `submit` moves only a Story that is In Progress.
 3. Work with test-driven-development, one behaviour at a time:
    - Write unit and integration tests first.
    - Give every acceptance criterion an E2E test whose name starts with its code.

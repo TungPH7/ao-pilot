@@ -102,6 +102,12 @@ fields:
 # flag-needs-you sets Flagged, adds this label and comments the reason (spec 2.3).
 needs_you_label: needs-you
 
+# Labels ba puts on an item it creates (dev-workflow spec 2.5): the dev agent that builds it, such as ao-fe-dev, and the
+# effort of a hard item, such as ao-effort-xhigh, which you approve with the plan. /ao-build reads them.
+work_labels:
+  role_prefix: ao-
+  effort_prefix: ao-effort-
+
 # One Kanban board per space. Columns follow the board_column of the contract states; the first is the Kanban backlog.
 # `{key}` is the space key. Cancelled items have no column, so they leave the board.
 board:

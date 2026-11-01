@@ -35,6 +35,7 @@ stages:
     input: "Epic ở new"
     outputs:
       artifacts: [spec, design]
+      other: "PR tài liệu của Epic vào develop, từ nhánh feature/<EPIC-KEY>-spec; bạn đọc diff của nó trước cổng ①"
     gate: spec-approval
   - id: plan
     name: "Lập plan, tạo Story/Task"
@@ -43,7 +44,7 @@ stages:
     input: "SPEC đã duyệt"
     outputs:
       artifacts: [plan, story, task]
-      other: "Plan gồm hợp đồng API cho Story có cả FE và BE; các Story/Task nằm trên Jira"
+      other: "Plan gồm hợp đồng API cho Story có cả FE và BE, vai trò của từng item và effort của item khó; các Story/Task nằm trên Jira. Plan và ADR vào cùng PR tài liệu, và merge-gate merge PR đó sau cổng ② mà không cần review hay approve trên GitHub"
     gate: plan-approval
   - id: build
     name: "Code theo TDD"

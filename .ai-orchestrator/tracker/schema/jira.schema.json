@@ -3,7 +3,7 @@
   "title": "tracker/jira.yaml",
   "description": "Mapping of the SDLC contract to Jira Cloud (tracker-integration spec sections 2.2 and 2.3).",
   "type": "object",
-  "required": ["site", "cloud_id", "identities", "workflow_scheme", "workflows", "fields", "needs_you_label", "board", "environments"],
+  "required": ["site", "cloud_id", "identities", "workflow_scheme", "workflows", "fields", "needs_you_label", "work_labels", "board", "environments"],
   "additionalProperties": false,
   "properties": {
     "site": {
@@ -33,6 +33,15 @@
     "needs_you_label": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "work_labels": {
+      "type": "object",
+      "required": ["role_prefix", "effort_prefix"],
+      "additionalProperties": false,
+      "properties": {
+        "role_prefix": { "type": "string", "pattern": "^[a-z][a-z0-9]*-$" },
+        "effort_prefix": { "type": "string", "pattern": "^[a-z][a-z0-9-]*-$" }
+      }
     },
     "board": {
       "type": "object",

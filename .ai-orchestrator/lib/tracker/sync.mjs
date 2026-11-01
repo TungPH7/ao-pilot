@@ -1,6 +1,8 @@
 // jira-sync (tracker-integration spec section 2.7): the work items a GitHub event concerns, each reconciled, then the
 // changes made with the CI token. scripts/jira-sync.mjs only reads the event and builds the clients.
 import { extractKeys, parseBranch } from './conventions.mjs';
+import { planDorLine, tickDorLine } from './dor.mjs';
+import { clearsMergeGateFlag } from './flags.mjs';
 import { reconcile } from './reconcile.mjs';
 
 const ACTOR = 'automation';
@@ -42,14 +44,25 @@ function waitingForDeployment(contract, mapping, space) {
 }
 
 // The changes for the items of an event, in order, what they still wait for, and the items that could not be
-// reconciled. A change on an item outside the space, like a child of an Epic in another space, is dropped.
+// reconciled. A change on an item outside the space, like a child of an Epic in another space, is dropped. A PR that
+// closes moves no item: it only clears the Needs you flag merge-gate raised for it (dev-workflow spec 2.7); `kept`
+// says why a flag stays.
 export async function syncEvent({ event, payload, jira, github, contract, mapping, space, approvers = [] }) {
   const keys = await itemsOf(event, payload, { jira, contract, mapping, space });
   const actions = [];
   const waiting = [];
+  const kept = [];
   const failures = [];
+  const closing = event === 'pull_request' && payload.action === 'closed';
   for (const key of keys) {
     try {
+      if (closing) {
+        const pr = payload.pull_request;
+        const decision = await flagClearing(key, pr.number, { jira, mapping });
+        if (decision.clear) actions.push({ key, effect: CLEAR, pr: pr.number, merged: Boolean(pr.merged) });
+        else if (decision.reason !== NOT_FLAGGED) kept.push({ key, reason: decision.reason });
+        continue;
+      }
       const found = await reconcile(key, { jira, github, contract, mapping, approvers });
       actions.push(...found.actions.filter((action) => action.key.startsWith(`${space}-`)));
       waiting.push(...found.waiting);
@@ -57,12 +70,33 @@ export async function syncEvent({ event, payload, jira, github, contract, mappin
       failures.push({ key, error });
     }
   }
-  return { keys, actions, waiting, failures };
+  return { keys, actions, waiting, kept, failures };
 }
 
-// Makes one change with a client made for writing.
-export async function applyAction(action, { jira, mapping }) {
-  if (action.transition) return jira.transition(action.key, action.name);
+const CLEAR = 'clear-needs-you';
+const NOT_FLAGGED = 'it is not flagged';
+
+// Reads what clearsMergeGateFlag needs: the item's labels, comments and changelog.
+async function flagClearing(key, number, { jira, mapping }) {
+  const path = `/rest/api/3/issue/${encodeURIComponent(key)}`;
+  const { fields } = await jira.get(path, { fields: 'labels' });
+  if (!(fields.labels ?? []).includes(mapping.needs_you_label)) return { clear: false, reason: NOT_FLAGGED };
+  const comments = await jira.getAll(`${path}/comment`, {}, 'comments');
+  const histories = await jira.getAll(`${path}/changelog`);
+  return clearsMergeGateFlag({ comments, histories, item: { labels: fields.labels }, number, mapping });
+}
+
+// Makes one change with a client made for writing. Returns a note on what it did besides, or nothing.
+export async function applyAction(action, { jira, mapping, contract }) {
+  if (action.transition) {
+    await jira.transition(action.key, action.name);
+    return action.transition === REFINE && contract ? tickPlanLine(action.key, { jira, contract }) : undefined;
+  }
+  if (action.effect === CLEAR) {
+    await clearFlag(action.key, { jira, mapping });
+    await jira.comment(action.key, `jira-sync: PR #${action.pr} was ${action.merged ? 'merged' : 'closed without merging'}, so the Needs you flag merge-gate raised for it is cleared.`);
+    return;
+  }
   if (action.effect !== FLAG) throw new Error(`jira-sync cannot make the effect ${action.effect}`);
   await raiseFlag(action.key, { jira, mapping });
   await jira.comment(
@@ -71,32 +105,66 @@ export async function applyAction(action, { jira, mapping }) {
   );
 }
 
-// The effect flag-needs-you without its comment: Jira's flag and the Needs you label. audit raises it too.
+// After refine, the Definition of Ready line "Thuộc Epic có plan đã duyệt" is true: tick it in the description, or say
+// on the item that there was none to tick (dev-workflow spec 2.9).
+const REFINE = 'refine';
+
+async function tickPlanLine(key, { jira, contract }) {
+  const { fields } = await jira.get(`/rest/api/3/issue/${encodeURIComponent(key)}`, { fields: 'description,issuetype,parent' });
+  const workType = contract.work_types.find(({ jira_issue_type: type }) => type === fields.issuetype.name)?.id;
+  const line = workType && planDorLine(contract, workType);
+  if (!line) return undefined;
+  const { description, status } = tickDorLine(fields.description, line);
+  if (status === 'ticked') {
+    await jira.editItem(key, { fields: { description } });
+    return 'ticked its DoR line';
+  }
+  if (status === 'already') return 'its DoR line was ticked already';
+  const epic = fields.parent?.key ? `the plan of ${fields.parent.key} is approved` : 'its plan is approved';
+  await jira.comment(key, `jira-sync: ${key} is Ready: ${epic}. Its description has no Definition of Ready line "${firstClause(line)}" to tick.`);
+  return 'its description has no DoR line to tick, so it got a comment';
+}
+
+const firstClause = (line) => line.split(',')[0].trim();
+
+// The effect flag-needs-you without its comment: Jira's flag and the Needs you label. audit and merge-gate raise it too.
 export async function raiseFlag(key, { jira, mapping }) {
+  await jira.editItem(key, { fields: { [await flaggedField(jira, mapping)]: [{ value: FLAG_VALUE }] }, update: { labels: [{ add: mapping.needs_you_label }] } });
+}
+
+// Takes the flag and the Needs you label off.
+export async function clearFlag(key, { jira, mapping }) {
+  await jira.editItem(key, { fields: { [await flaggedField(jira, mapping)]: null }, update: { labels: [{ remove: mapping.needs_you_label }] } });
+}
+
+async function flaggedField(jira, mapping) {
   const name = mapping.fields.flagged.jira_field;
   const flagged = (await jira.get('/rest/api/3/field')).find((field) => field.name === name);
   if (!flagged) throw new Error(`Jira has no field ${name}`);
-  await jira.editItem(key, { fields: { [flagged.id]: [{ value: FLAG_VALUE }] }, update: { labels: [{ add: mapping.needs_you_label }] } });
+  return flagged.id;
 }
 
-export function describe({ key, transition, name, from, to, effect, reworkCount }) {
-  return transition ? `${key}: ${name} (${from} → ${to})` : `${key}: ${effect} (rework ${reworkCount})`;
+export function describe({ key, transition, name, from, to, effect, reworkCount, pr, merged }) {
+  if (transition) return `${key}: ${name} (${from} → ${to})`;
+  if (effect === CLEAR) return `${key}: ${effect} (PR #${pr} ${merged ? 'merged' : 'closed'})`;
+  return `${key}: ${effect} (rework ${reworkCount})`;
 }
 
 // Reconciles the event, prints what it finds and, unless dryRun, makes each change, then prints what the items still
 // wait for. A failure does not stop the others; all of them are returned, so the caller can exit non-zero.
 export async function runSync({ dryRun = false, log = console.log, ...context }) {
-  const { keys, actions, waiting, failures } = await syncEvent(context);
+  const { keys, actions, waiting, kept, failures } = await syncEvent(context);
   log(`${context.event}: ${keys.length > 0 ? keys.join(', ') : `no work item of ${context.space}`}`);
   for (const { key, error } of failures) log(`Failed ${key}: ${error.message}`);
+  for (const { key, reason } of kept) log(`Kept ${key} flagged: ${reason}`);
   for (const action of actions) {
     if (dryRun) {
       log(`Would make ${describe(action)}`);
       continue;
     }
     try {
-      await applyAction(action, context);
-      log(`Made ${describe(action)}`);
+      const note = await applyAction(action, context);
+      log(`Made ${describe(action)}${note ? `; ${note}` : ''}`);
     } catch (error) {
       failures.push({ key: action.key, error });
       log(`Failed ${describe(action)}: ${error.message}`);

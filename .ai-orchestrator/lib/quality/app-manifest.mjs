@@ -1,5 +1,7 @@
 // The two GitHub Apps of the agents (quality-gates spec section 2.2) as manifests for GitHub's manifest flow, and the
 // local page that sends them to GitHub. Pure: scripts/github-app-create.mjs serves the page and talks to GitHub.
+// Workflows, Actions and checks come from dev-workflow spec 2.3: devops pushes workflow files with ao-dev, and every
+// role reads CI with a read-only ao-review token. Each token asks only for the part of these it needs.
 
 export const HOMEPAGE = 'https://github.com/TungPH7/ai-orchestrator-v1';
 
@@ -7,12 +9,12 @@ export const APPS = {
   dev: {
     suffix: 'ao-dev',
     description: 'Opens and merges pull requests for the ai-orchestrator agents.',
-    permissions: { contents: 'write', pull_requests: 'write' },
+    permissions: { contents: 'write', pull_requests: 'write', workflows: 'write', actions: 'read', checks: 'read' },
   },
   review: {
     suffix: 'ao-review',
     description: 'Posts review reports for the ai-orchestrator agents.',
-    permissions: { contents: 'read', pull_requests: 'write' },
+    permissions: { contents: 'read', pull_requests: 'write', actions: 'read', checks: 'read' },
   },
 };
 

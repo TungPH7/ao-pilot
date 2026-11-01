@@ -5,6 +5,7 @@ description: "UI/UX designer: writes design.md for an Epic that touches the UI, 
 tools: Read, Glob, Grep, Bash, Edit, Write, mcp__atlassian__getJiraIssue, mcp__atlassian__searchJiraIssuesUsingJql, mcp__atlassian__executeRead
 model: sonnet
 effort: xhigh
+maxTurns: 60
 skills:
   - frontend-ui-engineering
 ---

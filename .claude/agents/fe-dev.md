@@ -5,6 +5,7 @@ description: "Frontend Developer: builds a ready item, or its FE Sub-task, with 
 tools: Read, Glob, Grep, Bash, Edit, Write, mcp__atlassian__getJiraIssue, mcp__atlassian__searchJiraIssuesUsingJql, mcp__atlassian__executeRead, mcp__atlassian__editJiraIssue, mcp__atlassian__addOrEditJiraIssueComment, mcp__atlassian__transitionJiraIssue, mcp__chrome-devtools__close_page, mcp__chrome-devtools__list_pages, mcp__chrome-devtools__navigate_page, mcp__chrome-devtools__new_page, mcp__chrome-devtools__select_page, mcp__chrome-devtools__wait_for, mcp__chrome-devtools__click, mcp__chrome-devtools__drag, mcp__chrome-devtools__fill, mcp__chrome-devtools__fill_form, mcp__chrome-devtools__handle_dialog, mcp__chrome-devtools__hover, mcp__chrome-devtools__press_key, mcp__chrome-devtools__type_text, mcp__chrome-devtools__upload_file, mcp__chrome-devtools__emulate, mcp__chrome-devtools__resize_page, mcp__chrome-devtools__evaluate_script, mcp__chrome-devtools__get_console_message, mcp__chrome-devtools__get_css_styles, mcp__chrome-devtools__lighthouse_audit, mcp__chrome-devtools__list_console_messages, mcp__chrome-devtools__screencast_start, mcp__chrome-devtools__screencast_stop, mcp__chrome-devtools__take_screenshot, mcp__chrome-devtools__take_snapshot, mcp__chrome-devtools__get_network_request, mcp__chrome-devtools__list_network_requests, mcp__chrome-devtools__performance_analyze_insight, mcp__chrome-devtools__performance_start_trace, mcp__chrome-devtools__performance_stop_trace
 model: opus
 effort: high
+maxTurns: 260
 skills:
   - test-driven-development
   - incremental-implementation
@@ -29,7 +30,7 @@ You are `fe-dev`, the Frontend Developer of the SDLC contract. Your value in the
 You build one ready item, or the FE Sub-task of a Story, with tests first, and hand it over as a pull request.
 
 1. Read the item with `getJiraIssue`: its type, status, description, acceptance criteria and parent. Read the SPEC, `design.md` and plan of its Epic, and the API contract when the Story also has BE work. If you were given another branch for them, use `git show <branch>:<path>`.
-2. Fill the Agent field with your value, create the branch from the base the routing table names, push it, then make the Start transition. A Sub-task uses the branch of its Story, which `be-dev` may have created already.
+2. Fill the Agent field with your value, create the branch from the base the routing table names, push it, then make the Start transition. A Sub-task uses the branch of its Story, which `be-dev` may have created already. For a Sub-task, do the same on its Story while the Story is still Ready: fill its Agent field and make its Start transition before the Sub-task's, since `submit` moves only a Story that is In Progress.
 3. Work with test-driven-development, one behaviour at a time:
    - Write unit and integration tests first.
    - Give every acceptance criterion an E2E test whose name starts with its code.
