@@ -73,11 +73,10 @@ Tôi đã chạy thử hợp đồng của plan này ngày 2026-11-01, trên Nod
     - Plan và ADR-0002 vào PR tài liệu #15, cùng SPEC và design. `merge-gate` merge PR đó vào `develop` sau gate ②.
     - Nhánh Story tách từ `develop` sau khi PR #15 merge thì có đủ tài liệu. Nếu PR chưa merge, agent đọc bằng `MSYS_NO_PATHCONV=1 git show origin/feature/DEMO-20-spec:docs/specs/DEMO-20/<file>`.
     - ADR-0001 chỉ có trên `feature/DEMO-11-spec` (quyết định 9 của plan DEMO-11).
-11. **Effort: không item nào cần `xhigh` hay `max`.**
-    - Không có tiền thật đi qua (không thanh toán, giỏ mẫu cố định), và không có dữ liệu được lưu.
-    - Các bước kiểm `Host`, `Origin` và cỡ body không đổi, và test hiện có đã phủ chúng.
-    - Ranh giới tin cậy mới (server chỉ đọc mã dòng từ form) được ghim bằng AC11 và các test của mục Non-functional requirements.
-    - Hai Sub-task chạy với effort mặc định của vai trò. Bạn có thể nâng effort ở gate ②.
+11. **Effort: DEMO-22 (Sub-task BE) chạy ở `xhigh`; DEMO-23 (Sub-task FE) giữ effort mặc định của vai trò.** Quyết định của bạn trước gate ②, ngày 2026-11-01.
+    - Lý do nâng DEMO-22: đây là phần server đọc dữ liệu từ form (`remove`, `removed`), tức ranh giới tin cậy mới của Epic. AC11 và các test của mục Non-functional requirements ghim ranh giới này.
+    - Trên Jira, DEMO-22 mang nhãn `ao-effort-xhigh` cùng nhãn `ao-be-dev`. DEMO-23 không có nhãn effort.
+    - Không item nào ở `max`. Đề xuất ban đầu của plan là effort mặc định cho cả hai Sub-task: không có tiền thật đi qua (không thanh toán, giỏ mẫu cố định), không có dữ liệu được lưu, và các bước kiểm `Host`, `Origin` và cỡ body không đổi, đã có test phủ.
 
 ## API Contract
 
@@ -257,7 +256,7 @@ td form{display:block;margin:0}
 
 ### Phase 1: Server
 - [ ] DEMO-21: Xóa sản phẩm khỏi giỏ hàng (AC1–AC11; S1, khối S1.2–S1.10) · be-dev, fe-dev (Sub-task)
-- [ ] DEMO-22: BE: mã dòng và yêu cầu xóa của `POST /` (AC10, AC11, phần server của AC1–AC9; S1.7–S1.10) · be-dev
+- [ ] DEMO-22: BE: mã dòng và yêu cầu xóa của `POST /` (AC10, AC11, phần server của AC1–AC9; S1.7–S1.10) · be-dev · effort xhigh: phần server đọc dữ liệu từ form, ranh giới tin cậy mới (quyết định 11)
 
 ### Checkpoint: Server
 - [ ] `npm run lint`, `npm run typecheck` và `npm test` xanh.
@@ -273,7 +272,7 @@ td form{display:block;margin:0}
 - [ ] Kiểm tay S1 ở 320, 360, 768, 1024 và 1440 px.
 - [ ] Mở PR của Story.
 
-### Sub-task BE DEMO-22 (`be-dev`)
+### Sub-task BE DEMO-22 (`be-dev`, effort `xhigh`)
 
 - AC:
   - Toàn bộ AC10 và AC11, kể cả E2E.
@@ -394,4 +393,4 @@ npm run test:e2e        # AC1–AC11 of DEMO-20, AC1–AC11 of DEMO-11, AC1 and 
 Không còn câu hỏi mở.
 
 - Plan chốt các đề xuất của SPEC mà không đổi: tên trường `remove` và `removed`, mã dòng `[a-z0-9-]{1,32}`, mã của `SAMPLE_CART`. Vì vậy SPEC không phải sửa.
-- Không item nào có effort `xhigh` hay `max` (quyết định 11). Nếu bạn muốn nâng effort của Sub-task BE, ghi ở gate ②, và `ba` thêm nhãn tương ứng.
+- Effort được trả lời trước gate ②, ngày 2026-11-01: bạn nâng DEMO-22 lên `xhigh`, và DEMO-23 giữ effort mặc định. Câu trả lời đã thành quyết định 11 và dòng của DEMO-22 trong Task List. `ba` đã thêm nhãn `ao-effort-xhigh` cho DEMO-22 trên Jira.
