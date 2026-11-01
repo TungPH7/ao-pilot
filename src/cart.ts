@@ -41,3 +41,18 @@ export function checkLineIds(lines: readonly { id: string }[]): void {
     seen.add(id);
   }
 }
+
+// The lines that stay once the lines whose id is one of ids are taken out, in the order of the cart, and the ids of the
+// lines taken out, in the same order, each once and taken from the lines, never from ids. An id that is no line of the
+// cart, a repeated one or an empty one is ignored; ids are compared as they are. Lookups go through a Set, never the
+// keys of an object, so "constructor" or "__proto__" is an unknown id. Never throws, and changes nothing it is given.
+export function removeLines<T extends { id: string }>(lines: readonly T[], ids: Iterable<string>): { kept: T[]; removed: string[] } {
+  const out = new Set(ids);
+  const kept: T[] = [];
+  const removed: string[] = [];
+  for (const line of lines) {
+    if (out.has(line.id)) removed.push(line.id);
+    else kept.push(line);
+  }
+  return { kept, removed };
+}
