@@ -52,3 +52,9 @@ export function applyCoupon(form: CouponForm): CouponState {
   const reason = form.code.trim() === '' ? 'empty' : 'invalid';
   return { applied: findCoupon(form.applied) ?? null, rejected: { reason, typed: form.code } };
 }
+
+// The state after a form that sends no code, such as the form of a Xóa button: the coupon in force, checked against the
+// list again like any code, and no message.
+export function keepCoupon(applied: string): CouponState {
+  return { applied: findCoupon(applied) ?? null, rejected: null };
+}
