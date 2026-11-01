@@ -129,9 +129,79 @@ Nút "Xóa" nằm trong một ô mới của mỗi dòng. Hai test hiện có ki
 
 Mọi E2E khác của DEMO-10 và DEMO-11 phải pass mà không đổi.
 
+### Non-functional requirements
+
+`sa` thêm mục này ngày 2026-11-01. Tôi chạy thử mọi hành vi của Node nêu dưới đây trên Node 24.17.0, cùng ngày. Số byte Chrome gửi, tôi đo trên Chrome cài trên máy, qua Playwright 1.64.1, với prototype ở `.ai/sa/demo-20/probe/` (không commit).
+
+Các yêu cầu của DEMO-11 giữ nguyên: giới hạn header, thời hạn request, đọc body bằng sự kiện `data` và `end`, header của response. Mục này chỉ ghi phần Epic thêm.
+
+#### Performance
+
+- Mỗi request vẫn xử lý hoàn toàn trong bộ nhớ: không đọc file, không gọi mạng, không cơ sở dữ liệu. Chọn các dòng còn lại là lọc giỏ của server theo mã dòng gửi lên.
+- `GET /` và `HEAD /` vẫn trả trang dựng một lần khi tạo server. `POST /` dựng trang ở mỗi request, như hôm nay.
+- Giới hạn body 1.024 byte giữ nguyên, và mọi form của trang phải vừa giới hạn đó. Trên giỏ mẫu, với tên trường và mã dòng `ba` đề xuất, body lớn nhất Chrome gửi là:
+  - form của nút "Xóa": 44 byte, `removed=but-bi&applied=GIAM20K&remove=so-tay`;
+  - form mã: 612 byte, khi ô mã có đủ 64 ký tự 3 byte UTF-8 như "ạ" (mỗi ký tự thành 9 byte `%E1%BA%A1`), cùng một dòng đã xóa và `GIAM20K`.
+- Vì giỏ còn lại đi theo form, giới hạn body chặn số dòng đã xóa mà form mã mang được:
+  - Mỗi dòng đã xóa thêm `&removed=<mã dòng>`, tức 9 byte cộng độ dài mã.
+  - Với ô mã ở trường hợp xấu nhất trên, form còn chỗ cho 28 dòng đã xóa có mã 6 ký tự, hay 10 dòng có mã 32 ký tự.
+  - Giỏ của Epic có hai dòng, nên Epic chấp nhận giới hạn này. Giỏ lớn hơn cần lưu giỏ (ngoài phạm vi) hoặc nâng giới hạn body (Ask first).
+- Body 1.024 byte chứa nhiều nhất 128 giá trị `removed`. Server tra từng giá trị trong một `Set` các mã dòng của giỏ, nên thời gian tỷ lệ với số dòng cộng số giá trị.
+- Không đặt mục tiêu độ trễ bằng số, như DEMO-11. Mỗi request của `src/server.test.ts` vẫn có timeout 5.000 ms.
+
+#### Security
+
+Bổ sung cho mục Technical requirements và mục Boundaries:
+
+- Yêu cầu xóa không có đường riêng trong server. Server đọc `remove` và `removed` ở cùng chỗ đọc `code` hôm nay: sau các bước kiểm `Host`, path, method, `Origin` và cỡ body. Vì vậy form của trang khác nhận 403 trước khi body được đọc (AC10).
+- `frame-ancestors 'none'` và `form-action 'self'` của CSP giữ nguyên. Trang khác không nhúng được trang giỏ hàng để lừa người mua bấm "Xóa", và form của trang chỉ gửi về server này.
+- Từ form, server chỉ đọc mã: `remove`, mọi giá trị của `removed`, và `applied` như hôm nay. Tên, đơn giá, số lượng, số tiền và mọi trường khác bị bỏ qua (AC11). Server chỉ đọc giá trị đầu của `remove`, như `code` và `applied` hôm nay.
+- Mã dòng gửi lên được so với mã dòng của giỏ server nguyên chuỗi, như `Host` và `Origin`: không trim, không đổi hoa thường. Vì vậy `BUT-BI` là mã lạ và bị bỏ qua. Trên Node 24.17.0, `removed=%FF` cho U+FFFD, cũng là mã lạ.
+- Tra mã dòng bằng `Set` hay `Map` dựng từ giỏ server, không bằng khóa của một object thường.
+  - Trên Node 24.17.0, `({})['__proto__']`, `({})['constructor']`, `({})['toString']` và `({})['hasOwnProperty']` đều có giá trị, nên `remove=constructor` sẽ trùng một "dòng" không có thật.
+  - `Set.has` trả `false` cho cả bốn.
+- Trang trả về ghi mã dòng lấy từ giỏ server, không ghi chuỗi gửi lên. Vì vậy các trường mới không đưa chuỗi nào của request vào HTML. Mã dòng vẫn qua `escapeHtml`, và thuộc tính vẫn có dấu nháy (Technical requirements).
+- Mã dòng của giỏ server không rỗng và không trùng trong một giỏ:
+  - mã trùng làm một nút "Xóa" xóa hai dòng;
+  - mã rỗng không phân biệt được với giá trị rỗng bị bỏ qua.
+  - Giỏ vi phạm làm `cartServer(items)` ném `RangeError` khi tạo server, không ở một request, như giá hay số lượng sai hôm nay.
+  - Đề xuất, plan chốt: mã dòng chỉ gồm `a`–`z`, `0`–`9` và `-`, dài 1 đến 32 ký tự. Như vậy mã không phải mã hóa trong body, và giới hạn ở mục Performance luôn đúng.
+- Mã dòng lạ, trùng hay rỗng gửi lên là kết quả bình thường: không ném lỗi, không trả lỗi, response không có stack trace.
+- Không giới hạn tần suất request, như DEMO-11. Server không lưu trạng thái, nên một yêu cầu xóa chỉ đổi trang trả về cho chính request đó. [Inference] Nếu không có bước kiểm `Origin`, tác hại lớn nhất của một yêu cầu xóa giả là trang giỏ thiếu dòng trong trình duyệt của người mua; mở lại `/` là có lại giỏ.
+
+#### Data and retention
+
+- Dữ liệu mới Epic xử lý: mã dòng cần xóa và danh sách mã dòng đã xóa, trong body của `POST /` và trong các trường của trang.
+  - Mã dòng là hằng số trong code (`SAMPLE_CART`), không phải dữ liệu người dùng.
+  - Epic không thêm dữ liệu cá nhân.
+- Lưu ở server: không có. Không cookie, không session, không file. Giỏ còn lại chỉ nằm trong bộ nhớ trong thời gian của một request, và trong HTML trả về. Thời gian lưu ở server: 0.
+- Ở trình duyệt, trang trả về của `POST /` nằm trong lịch sử như mọi trang, kèm giỏ còn lại trong các trường. Epic không điều khiển lịch sử của trình duyệt. Mở lại `/` bằng `GET` cho lại giỏ mẫu đủ (Scope).
+- Log: Epic không thêm log theo request. Không ghi body, mã dòng hay giá trị header vào log (Boundaries).
+- Dữ liệu test:
+  - giỏ mẫu và giỏ của AC4 (Bàn phím, Chuột);
+  - các mã dòng lạ như `khong-co`, `BUT-BI`, `constructor`.
+  - Trace của Playwright nằm ở `test-results/`, đã có trong `.gitignore`.
+
+#### Tests of these requirements
+
+Cộng thêm vào mục Testing Strategy, ở `src/server.test.ts`:
+
+- Body lớn nhất mà trang gửi trên giỏ mẫu (612 byte như trên, tính lại theo tên trường plan chốt) được đọc, và server trả 200.
+- `remove` là `constructor`, `__proto__` hay `BUT-BI`: trang là giỏ mẫu đủ hai dòng.
+- `removed` là `<script>` hay một mã lạ khác: trang trả về không chứa chuỗi đó.
+- `cartServer` với mã dòng trùng hay rỗng ném `RangeError` khi tạo server.
+- Yêu cầu xóa có `Origin` sai nhận 403, kể cả khi body quá 1.024 byte.
+
 ## Tech Stack
 
 Epic không thêm dependency, không đổi phiên bản nào. Phiên bản hiện có nằm trong `package.json` (Node `>=24.2`, TypeScript 6.0.3, `@playwright/test` 1.64.1); các lệnh nằm trong README.
+
+Epic dùng lần đầu trong repo hai thứ có sẵn, không phải dependency mới:
+
+| Thứ dùng | Dùng cho | Đã chạy thử |
+|---|---|---|
+| `URLSearchParams.prototype.getAll` | Đọc mọi giá trị của trường lặp lại `removed` | Node 24.17.0, ngày 2026-11-01 (`sa`): trả mọi giá trị theo thứ tự, kể cả giá trị rỗng và trùng |
+| Một test Playwright import `src/server.ts` và tự khởi động `cartServer(items)` trên port 0 của 127.0.0.1 | E2E của AC4, với giỏ 55.000 ₫ | Playwright 1.64.1 và Chrome, ngày 2026-11-01 (`ba`, `.ai/ba/demo-20/probe/`) |
 
 ## Commands
 
@@ -252,7 +322,44 @@ Các điều kiện sau cộng thêm vào Epic DoD của `.ai-orchestrator/docs/
 
 ## Open Questions
 
-Không còn câu hỏi mở.
+Các câu Q1–Q3 của `ba` được trả lời ngày 2026-11-01: bạn chọn đề xuất của `ba` ở cả ba câu. Các câu trả lời đã thành quyết định trong các mục Scope, Business rules, User stories và Testing Strategy.
 
-- Các câu Q1–Q3 của bản trước được trả lời ngày 2026-11-01: bạn chọn đề xuất của `ba` ở cả ba câu.
-- Các câu trả lời đã thành quyết định trong các mục Scope, Business rules, User stories và Testing Strategy.
+Câu Q4 và Q5 dưới đây là của `sa`, ngày 2026-11-01. Cả hai đụng tới mục Ask first "Đổi một test hiện có ngoài hai test của mục Tests that change", nên cần bạn trả lời trước gate ①.
+
+**Q4. Ba test hiện có nữa của `src/page.test.ts` phải đổi theo design.**
+
+Tôi dựng một prototype của `renderCart` theo `design.md`:
+
+- mỗi nút "Xóa" có form riêng trong ô thứ năm;
+- mã đang áp và các dòng đã xóa đi trong mọi form;
+- `STYLE` có một media query dưới 30 rem.
+
+Rồi tôi chạy các test hiện có trên Node 24.17.0. 26 test của `src/server.test.ts` pass mà không đổi. Ở `src/page.test.ts`, ngoài test "each line shows…" đã có trong mục Tests that change, ba test sau fail vì chính design, không vì lỗi của prototype:
+
+| Test | Điều nó kiểm, nay sai | Ý nghĩa cần giữ |
+|---|---|---|
+| "a cart has a coupon form posting to /, with the labelled field [3] and the button [4], between the table and the totals" | `<form` đầu tiên đứng sau `</table>`. Nay form đầu tiên là form của nút "Xóa", trong bảng | Form mã đứng giữa bảng và các con số |
+| "a coupon in force goes back with the form in the hidden field applied" | Trang có đúng một `name="applied"`. Nay mỗi form có một, tức ba trên giỏ mẫu | Mã đang áp đi theo mọi form, mỗi form đúng một lần |
+| "the style wraps the button under the field when the row is too narrow, without a media query" | `STYLE` không có `@media`. Design thêm đúng một media query dưới 30 rem | Hàng ô mã và nút "Áp dụng" vẫn xuống dòng mà không cần media query; `STYLE` có đúng một media query, và nó không đụng luật của form mã |
+
+Tôi chỉ đọc các E2E hiện có, chưa chạy chúng trên prototype. Chúng tìm phần tử theo nhãn, theo vai trò với tên đầy đủ, hay theo `data-testid`, nên không đụng tới nút "Xóa", trừ AC1 của DEMO-10 đã có trong mục Tests that change.
+
+Đề xuất: thêm ba test này vào mục Tests that change, giữ ý nghĩa ở cột cuối.
+
+**Q5. Thêm mã dòng vào dữ liệu của các test hiện có.**
+
+Nếu `CartItem` có trường `id` bắt buộc, như `ba` đề xuất ở mục Technical requirements, thì dữ liệu của các test hiện có thiếu `id`:
+
+- 7 dòng dữ liệu, trong 6 giỏ, của `src/page.test.ts`;
+- 1 dòng của `src/server.test.ts`, trong test "a cart the page cannot show stops the server from being made, not a request".
+
+Khi đó `npm run typecheck` fail. Trên prototype, `escapeHtml(undefined)` còn ném `TypeError`, làm 26 trên 30 test của `src/page.test.ts` fail. Có hai cách:
+
+- (A) Thêm `id` vào các dòng dữ liệu đó. Chỉ đổi dữ liệu, không đổi assertion hay tên test. Thêm `id` vào `SAMPLE_CART` không đổi dòng, giá hay số lượng của nó.
+- (B) Không thêm `id`. Mã dòng là vị trí của dòng trong giỏ server (`0`, `1`), và `renderCart` nhận danh sách đã xóa ở một tham số thứ ba có giá trị mặc định. Không test hiện có nào phải đổi dữ liệu.
+
+Đề xuất: (A).
+
+- Lý do chính: nếu thứ tự của giỏ server đổi giữa hai lần tải trang, như khi sửa `SAMPLE_CART` hay sau này khi giỏ được lưu, thì với (B) form của một trang đang mở xóa nhầm dòng mà không ai thấy lỗi. Với (A), mã cũ chỉ là mã lạ và bị bỏ qua.
+- Mã như `but-bi` cũng đọc được trong body và trong README, và khớp ví dụ `khong-co` của AC11.
+- Test "a cart the page cannot show…" giữ ý nghĩa: giỏ của nó vẫn bị từ chối vì giá âm.
