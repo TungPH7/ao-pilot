@@ -13,12 +13,14 @@ on:
         type: choice
         options: [development, staging, production]
 
-# audit.yml cannot raise the permissions of this token, so the run grants what the audit reads.
+# audit.yml cannot raise the permissions of this token, so the run grants what the audit reads. actions: read dates
+# the CI run of a docs PR (dev-workflow spec 2.4).
 permissions:
   contents: read
   pull-requests: read
   checks: read
   statuses: read
+  actions: read
 
 jobs:
   audit:

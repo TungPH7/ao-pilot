@@ -11,6 +11,10 @@ Keep headings in English and write the content in Vietnamese. Delete the guidanc
 
 Role: <reviewer | security>
 
+<!-- A security review of only the changes since its last full report (dev-workflow spec 2.6) adds, under Role, the line
+Scope: changes since <short SHA of the commit of that report>
+Every other review covers the whole PR and has no Scope line. -->
+
 ## Context
 
 <!-- The spec or plan section the change implements, and the behavior it is meant to change. -->
@@ -101,6 +105,27 @@ Role: reviewer
 
 ## Verdict
 - [x] **Request changes**: sửa finding High rồi review lại.
+````
+
+</details>
+
+<details>
+<summary>Ví dụ: security chỉ review phần mới của PR đó</summary>
+
+````markdown
+# Review: feat(auth): add email and password login (DEMO-12)
+
+Role: security
+Scope: changes since 0f1e2d3
+
+## Context
+- [x] Phần mới từ `0f1e2d3`: body của `POST /auth/login` được validate, 18 dòng. Báo cáo đầy đủ trên `0f1e2d3` là review ngày 2026-11-02.
+
+## Findings
+Không có finding.
+
+## Verdict
+- [x] **Approve**: ready for your approval at gate ③ merge-approval
 ````
 
 </details>

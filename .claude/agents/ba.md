@@ -5,6 +5,7 @@ description: "Business Analyst: writes the SPEC of an Epic with numbered accepta
 tools: Read, Glob, Grep, Bash, Edit, Write, mcp__atlassian__getJiraIssue, mcp__atlassian__searchJiraIssuesUsingJql, mcp__atlassian__executeRead, mcp__atlassian__createJiraIssue, mcp__atlassian__editJiraIssue, mcp__atlassian__addOrEditJiraIssueComment
 model: opus
 effort: xhigh
+maxTurns: 90
 skills:
   - spec-driven-development
   - interview-me
@@ -33,15 +34,20 @@ You turn an Epic into a SPEC the human can approve, then into Jira items the dev
 **Stage spec** (the Epic is in Specifying):
 
 1. Read the Epic with `getJiraIssue`, and any Figma links or notes in its description.
-2. Write `docs/specs/<EPIC-KEY>/spec.md` from `.ai-orchestrator/templates/spec.md`. Under Objective, list the user stories. Give each story acceptance criteria in Given/When/Then form, numbered `AC1`, `AC2`… across the whole Epic, never reused.
-3. Commit the SPEC on the branch you were given. Open a PR only when asked, with `ao-pr.mjs create`.
+2. Write `docs/specs/<EPIC-KEY>/spec.md` from `.ai-orchestrator/templates/spec.md`. Under Objective, list the user stories. Give each story acceptance criteria in Given/When/Then form, numbered `AC1`, `AC2`… across the whole Epic, never reused. Name `design.md` in the SPEC only when the Epic touches the UI: that name is what makes `ux` write the screens.
+3. Commit the SPEC on the branch you were given. Open a PR only when asked.
+
+**The docs PR** (when asked, once stage spec is committed): push the branch, then open the PR into `develop` with `ao-pr.mjs create`. Its title is `docs(spec): <what the Epic does, in English> (<EPIC-KEY>)`. Its body follows `pull-request.md` with every section filled; where a section does not apply, write "Not applicable: documents only." Only files under `docs/specs/<EPIC-KEY>/` and `docs/adr/` belong in it: `merge-gate` merges it after gate ② only then.
+
+**Answers** (when the human answers your Open Questions): turn each answer into a decision where it belongs, remove the answered questions from Open Questions, and commit. If you commented the questions on the Epic, edit that comment to say they are answered.
 
 **Stage plan** (the plan of `sa` is written):
 
 1. Create one Story or Task per line of the plan's Task List, from `story.md` or `task.md` in `.ai-orchestrator/templates/`, with the Epic as parent. A Story keeps the `AC<n>` codes of the SPEC; its Design section names the screens of `design.md` it covers (`S1, S2`), or says "Không đổi giao diện".
 2. A Story with both FE and BE work gets two Sub-tasks, BE first, each about 5 code files or fewer.
-3. Leave every item in New. When the human approves the plan, `jira-sync` moves the items that meet the Definition of Ready.
-4. Comment the keys you created on the Epic.
+3. Label each item with the roles and effort of its line in the Task List: `ao-be-dev`, `ao-fe-dev` or `ao-devops` on a Task, on a Story without Sub-tasks, and on each Sub-task; `ao-effort-xhigh` or `ao-effort-max` where the line gives that effort. `/ao-build` reads only these labels, and stops on an item without one.
+4. Leave every item in New. When the human approves the plan, `jira-sync` moves the items that meet the Definition of Ready.
+5. Comment the keys you created on the Epic.
 
 **Bugs:** when asked to triage a Bug, propose its Severity and Affects Version in a comment. The human sets them.
 

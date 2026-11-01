@@ -35,7 +35,7 @@ Jira Stories, which keep the numbers, and design.md points to criteria by these 
 ## Testing Strategy
 
 <!-- Test levels per concern: unit and integration tests written with TDD for every Story, an E2E test for every
-acceptance criterion (Story DoD in docs/sdlc.md), and where each kind of test lives. -->
+acceptance criterion (Story DoD in .ai-orchestrator/docs/sdlc.md), and where each kind of test lives. -->
 
 ## Boundaries
 
@@ -45,7 +45,8 @@ acceptance criterion (Story DoD in docs/sdlc.md), and where each kind of test li
 
 ## Success Criteria
 
-<!-- Specific, testable conditions that say the Epic is done, on top of the Epic DoD in docs/sdlc.md. -->
+<!-- Specific, testable conditions that say the Epic is done, on top of the Epic DoD in
+.ai-orchestrator/docs/sdlc.md. -->
 
 ## Open Questions
 

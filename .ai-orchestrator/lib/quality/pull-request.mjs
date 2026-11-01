@@ -68,7 +68,9 @@ export function readReviewReport(body, roles) {
     if (severity) findings.push(Object.fromEntries(FINDING_COLUMNS.map((column, i) => [column, i === 0 ? severity : cells[i]])));
     else problems.push(`finding ${index + 1}: severity '${cells[0]}' is not Critical, High, Medium or Low`);
   });
-  return { ok: problems.length === 0, role: header.role, findings, blocking: findings.filter(({ severity }) => BLOCKING.includes(severity)), problems };
+  // A security review of the new part only says from which commit (dev-workflow spec 2.6).
+  const since = body.match(/^Scope:\s*changes since\s+([0-9a-f]{7,40})\s*$/m)?.[1];
+  return { ok: problems.length === 0, role: header.role, findings, blocking: findings.filter(({ severity }) => BLOCKING.includes(severity)), problems, ...(since && { scope: { since } }) };
 }
 
 // The first heading and the Role line that tell merge-gate which role wrote a review report.

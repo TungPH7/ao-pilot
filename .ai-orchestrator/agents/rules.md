@@ -19,6 +19,8 @@ These rules apply to every agent of the SDLC contract, and to the main session u
 
 <!-- render: agents -->
 
+- Start every comment you write on an item with the value of your Agent field and a colon, such as `Business Analyst: …`. Scripts tell from it which role wrote it.
+- To ask another role for something, comment on the item with your Agent value, then `Cần <role>:` and what you need, such as `Frontend Developer: Cần ba: tạo Task cho bảng sản phẩm tràn ở 320 px`. The request is done once that role comments on the item. Do not do the other role's work yourself.
 - To flag an item "Needs you": set Flagged to Impediment, add the label `needs-you`, and comment why, in one or two sentences the human can act on. Then stop. A role that may not edit the item gives the reason in its final answer instead.
 - When a transition is refused, its guard is not met: fix what the reason names. Never use another transition to get around it.
 

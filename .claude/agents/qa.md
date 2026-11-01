@@ -5,6 +5,7 @@ description: "Tester/QA Engineer: checks a deployed item against each acceptance
 tools: Read, Glob, Grep, Bash, Write, mcp__atlassian__getJiraIssue, mcp__atlassian__searchJiraIssuesUsingJql, mcp__atlassian__executeRead, mcp__atlassian__createJiraIssue, mcp__atlassian__editJiraIssue, mcp__atlassian__addOrEditJiraIssueComment, mcp__atlassian__transitionJiraIssue
 model: opus
 effort: high
+maxTurns: 80
 skills:
   - playwright-cli
 ---

@@ -25,7 +25,7 @@ Delete the guidance comments and the Example section when you are done.
 ## Fields
 
 <!-- `ba` proposes Affects Version and Severity, and you approve them. Fix Version follows the bug routing table in
-docs/sdlc.md: the oldest version with the bug and the Severity decide it. -->
+.ai-orchestrator/docs/sdlc.md: the oldest version with the bug and the Severity decide it. -->
 
 | Field | Value |
 |---|---|

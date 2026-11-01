@@ -45,13 +45,15 @@ vendored_skills:
 
 # Every agent also has Read, Glob and Grep. No agent has Skill, Agent, WebFetch or WebSearch (spec 2.3).
 # tools: Bash, Edit, Write. jira: read, create, edit, comment, transition. git: read or write (read only: spec 2.10).
-# writes: the files Edit and Write may touch; the protected paths of quality/gates.yaml still apply. max_turns is set
-# from the live runs (T22).
+# writes: the files Edit and Write may touch; the protected paths of quality/gates.yaml still apply. max_turns: twice
+# the most model turns of a live run of the role, rounded up to tens (spec 2.2; runs of tasks/archive/agent-roster/
+# verification.md). The most of fe-dev, 130, is its run at max, so a run raised for a hard item still fits.
 roles:
   pm:
     description: "Project Manager: writes the morning summary of the space from Jira and GitHub, with the weekly retro figures on Fridays. Read only."
     model: sonnet
     effort: medium
+    max_turns: 20
     tools: [Bash, Write]
     jira: [read]
     git: read
@@ -61,6 +63,7 @@ roles:
     description: "Business Analyst: writes the SPEC of an Epic with numbered acceptance criteria, then creates its Stories and Tasks from the plan. Give it the Epic key."
     model: opus
     effort: xhigh
+    max_turns: 90
     tools: [Bash, Edit, Write]
     jira: [read, create, edit, comment]
     git: write
@@ -70,6 +73,7 @@ roles:
     description: "UI/UX designer: writes design.md for an Epic that touches the UI, as numbered ASCII screens or from approved Figma images. Give it the Epic key."
     model: sonnet
     effort: xhigh
+    max_turns: 60
     tools: [Bash, Edit, Write]
     jira: [read]
     git: write
@@ -79,6 +83,7 @@ roles:
     description: "Solution Architect: adds the non-functional requirements to a SPEC, then writes the plan of the Epic with its API contract and task list. Give it the Epic key."
     model: opus
     effort: xhigh
+    max_turns: 80
     tools: [Bash, Edit, Write]
     jira: [read, comment]
     git: write
@@ -88,6 +93,7 @@ roles:
     description: "Frontend Developer: builds a ready item, or its FE Sub-task, with TDD on its branch and opens the PR. Give it the Jira key."
     model: opus
     effort: high
+    max_turns: 260
     tools: [Bash, Edit, Write]
     mcp: { chrome-devtools: [navigation, input, emulation, debugging, network, performance] }
     jira: [read, edit, comment, transition]
@@ -98,6 +104,7 @@ roles:
     description: "Backend Developer: builds a ready item, or its BE Sub-task, with TDD on its branch and opens the PR. Give it the Jira key."
     model: opus
     effort: high
+    max_turns: 170
     tools: [Bash, Edit, Write]
     jira: [read, edit, comment, transition]
     git: write
@@ -107,6 +114,7 @@ roles:
     description: "Code Reviewer: reviews a PR on five axes and posts the report. Give it the PR number."
     model: opus
     effort: xhigh
+    max_turns: 70
     tools: [Bash, Write]
     jira: [read]
     git: read
@@ -116,6 +124,7 @@ roles:
     description: "Security Engineer: reviews a PR for security, starting from a short threat model, and posts the report. Give it the PR number."
     model: opus
     effort: max
+    max_turns: 120
     tools: [Bash, Write]
     jira: [read]
     git: read
@@ -125,6 +134,7 @@ roles:
     description: "Tester/QA Engineer: checks a deployed item against each acceptance criterion, with evidence, and posts the QA report. Give it the Jira key."
     model: opus
     effort: high
+    max_turns: 80
     tools: [Bash, Write]
     jira: [read, create, edit, comment, transition]
     git: read
@@ -134,6 +144,7 @@ roles:
     description: "DevOps Engineer: changes CI/CD workflows through a PR, cuts releases and ships. Give it the Jira key."
     model: opus
     effort: high
+    max_turns: 50
     tools: [Bash, Edit, Write]
     jira: [read, edit, comment, transition]
     git: write

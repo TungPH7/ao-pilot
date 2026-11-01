@@ -6,3 +6,4 @@ dist/
 .ai/
 test-results/
 playwright-report/
+.playwright-cli/

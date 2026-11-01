@@ -1,5 +1,6 @@
 {
   "attribution": { "commit": "", "pr": "" },
+  "permissions": { "allow": ["Bash(node .ai-orchestrator/scripts/ao-step.mjs:*)"] },
   "env": {
     "AO_JIRA_SPACE": "DEMO",
     "AO_APPROVERS": "TungPH7",

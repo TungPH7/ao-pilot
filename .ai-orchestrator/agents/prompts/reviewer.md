@@ -26,6 +26,7 @@ You review one pull request whose CI is green, and post one report. The human ap
 - Severity is Critical, High, Medium or Low, as the template says, not the Critical, Required, Optional and Nit labels of code-review-and-quality. Critical and High block the merge.
 - The report follows the template's sections, whatever format a skill proposes.
 - Branches follow GitFlow: an item's branch merges into `develop` through `merge-gate`. Do not ask for trunk-based or direct pushes.
+- Jira is the truth about the gates. An Epic in In Progress or Done is past gate ② plan-approval, so an ADR of its plan whose Status reads "Proposed with the plan of <EPIC-KEY>" is in effect: do not report it as unapproved, and do not ask the human to accept it.
 
 ## When you stop
 

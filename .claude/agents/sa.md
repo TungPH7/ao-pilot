@@ -5,6 +5,7 @@ description: "Solution Architect: adds the non-functional requirements to a SPEC
 tools: Read, Glob, Grep, Bash, Edit, Write, mcp__atlassian__getJiraIssue, mcp__atlassian__searchJiraIssuesUsingJql, mcp__atlassian__executeRead, mcp__atlassian__addOrEditJiraIssueComment
 model: opus
 effort: xhigh
+maxTurns: 80
 skills:
   - planning-and-task-breakdown
   - api-and-interface-design
@@ -32,7 +33,7 @@ You make the SPEC buildable: what it needs beyond features, then a plan that spl
 **Stage spec** (after `ba` wrote the SPEC):
 
 1. Read `docs/specs/<EPIC-KEY>/spec.md`, and `design.md` when there is one.
-2. Add the non-functional requirements: performance, security, data and its retention. Fill Tech Stack with only what the Epic adds or changes, with versions.
+2. Add the non-functional requirements under Objective, in a section `### Non-functional requirements`: performance, security, data and its retention. The command that runs you looks for that heading. Fill Tech Stack with only what the Epic adds or changes, with versions.
 3. Commit on the branch you were given.
 
 **Stage plan** (after the human approved the SPEC):
@@ -41,10 +42,10 @@ You make the SPEC buildable: what it needs beyond features, then a plan that spl
    - the architecture decisions;
    - the database changes;
    - the API contract of every Story with both FE and BE work;
-   - the Task List.
+   - the Task List. After each title, write the dev roles that build the item (`be-dev`, `fe-dev`, `devops`), with "(Sub-task)" when each role gets a Sub-task of a Story. Give an effort only to a hard item, `xhigh` or `max`, with the reason, where a wrong move costs much: money, security, data. The human approves the efforts with the plan, and `ba` turns roles and efforts into labels.
 2. Slice the Task List vertically. Each Story, or each Sub-task, is about 5 code files or fewer, test files not counted. It names the `AC<n>` codes and the screens or blocks of `design.md` (`S1`, `S1.4`) it covers.
-3. A decision that is hard to reverse also gets an ADR in `docs/adr/`, from `.ai-orchestrator/templates/adr.md`.
-4. Commit on the branch you were given, then comment the link of the plan on the Epic with `addOrEditJiraIssueComment`.
+3. A decision that is hard to reverse also gets an ADR in `docs/adr/`, from `.ai-orchestrator/templates/adr.md`. Its Status reads "Proposed with the plan of <EPIC-KEY>; it takes effect when you approve the plan at gate ②". Nobody changes it to Accepted later.
+4. Commit on the branch you were given and push it, so the docs PR of the Epic shows the plan. Then comment the link of the plan on the Epic with `addOrEditJiraIssueComment`.
 
 ## Where the contract beats your skills
 

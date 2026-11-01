@@ -5,7 +5,8 @@ name: jira-sync
 
 on:
   pull_request:
-    types: [opened, reopened, synchronize, ready_for_review]
+    # closed only clears the Needs you flag merge-gate raised for the PR (dev-workflow spec 2.7).
+    types: [opened, reopened, synchronize, ready_for_review, closed]
   # Every review: changes asked send the item back; an approval can let a merged and deployed item go to QA.
   pull_request_review:
     types: [submitted]

@@ -34,6 +34,8 @@ export async function installationToken({ appId, privateKey, repo, permissions, 
     const hint = {
       401: `GitHub refused the JWT of App ${appId}: check the App ID and the private key`,
       404: `App ${appId} is not installed on ${repo}`,
+      // dev-workflow T2: GitHub answers 422 when the token asks for more than the installation was granted.
+      422: `App ${appId} on ${repo} lacks a permission of ${JSON.stringify(permissions)}: add it to the App, then accept it on the installation (docs/github-apps-setup.md)`,
     }[res.status];
     throw new Error(hint ?? `GitHub App ${appId}: ${method} ${path} returned ${res.status}`);
   }
@@ -45,6 +47,25 @@ export async function installationToken({ appId, privateKey, repo, permissions, 
     ...(permissions && { permissions }),
   });
   return { token, expiresAt };
+}
+
+// The account that commits for an App (dev-workflow spec 2.3): <slug>[bot], with the noreply address GitHub links to
+// it, which needs the bot's user id.
+export async function botIdentity({ slug, token, fetch = globalThis.fetch }) {
+  const login = `${slug}[bot]`;
+  const res = await fetch(`${API}/users/${encodeURIComponent(login)}`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'ai-orchestrator' },
+  });
+  if (!res.ok) throw new Error(`GitHub has no user ${login}: check AO_DEV_APP (${res.status})`);
+  const { id } = await res.json();
+  return { name: login, email: `${id}+${login}@users.noreply.github.com` };
+}
+
+// owner/name of a GitHub remote URL, by HTTPS or SSH. The name is safe to put in a command line.
+export function githubRepoOf(url) {
+  const repo = url.match(/github\.com[:/]([\w.-]+\/[\w.-]+?)(?:\.git)?$/)?.[1];
+  if (!repo) throw new Error(`the origin remote is not a GitHub repository: ${url || 'none'}`);
+  return repo;
 }
 
 // The App of one kind, 'dev' or 'review': id and slug from AO_<KIND>_APP_ID and AO_<KIND>_APP (set in the project's
@@ -67,7 +88,7 @@ export function appCredentials(kind, { env = process.env, readFile = readFileSyn
 }
 
 // A user environment variable as Windows stores it (HKCU\Environment); undefined elsewhere or when it is not set.
-function userVariable(name) {
+export function userVariable(name) {
   if (process.platform !== 'win32') return undefined;
   const { stdout } = spawnSync('reg', ['query', 'HKCU\\Environment', '/v', name], { encoding: 'utf8' });
   return stdout?.match(new RegExp(`^\\s*${name}\\s+REG_(?:EXPAND_)?SZ\\s+(.*?)\\s*$`, 'm'))?.[1];
