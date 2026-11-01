@@ -4,8 +4,8 @@ import { applyCoupon, NO_COUPON } from './coupon.ts';
 import { formatMoney, renderCart, type CartItem } from './page.ts';
 
 const items: CartItem[] = [
-  { name: 'Bút bi', price: 5000, quantity: 3 },
-  { name: 'Sổ tay', price: 12000, quantity: 2 },
+  { id: 'but-bi', name: 'Bút bi', price: 5000, quantity: 3 },
+  { id: 'so-tay', name: 'Sổ tay', price: 12000, quantity: 2 },
 ];
 
 // The markup of a page, without its head: the style names the selectors of the coupon form whether or not it is there.
@@ -16,10 +16,12 @@ test('money is shown in đồng, the Vietnamese way', () => {
   assert.equal(formatMoney(0), '0\u00a0₫');
 });
 
+// The four cells of DEMO-10 come first, then a fifth cell that holds the form of the Xóa button (SPEC of DEMO-20, Tests
+// that change).
 test('each line shows its name, unit price, quantity and line total', () => {
   const html = renderCart(items);
-  assert.match(html, /<tr data-testid="cart-line"><td>Bút bi<\/td><td>5\.000\u00a0₫<\/td><td>3<\/td><td>15\.000\u00a0₫<\/td><\/tr>/);
-  assert.match(html, /<tr data-testid="cart-line"><td>Sổ tay<\/td><td>12\.000\u00a0₫<\/td><td>2<\/td><td>24\.000\u00a0₫<\/td><\/tr>/);
+  assert.match(html, /<tr data-testid="cart-line"><td>Bút bi<\/td><td>5\.000\u00a0₫<\/td><td>3<\/td><td>15\.000\u00a0₫<\/td><td><form [^]*?<\/form><\/td><\/tr>/);
+  assert.match(html, /<tr data-testid="cart-line"><td>Sổ tay<\/td><td>12\.000\u00a0₫<\/td><td>2<\/td><td>24\.000\u00a0₫<\/td><td><form [^]*?<\/form><\/td><\/tr>/);
 });
 
 test('the page shows the subtotal, the shipping fee and the total', () => {
@@ -30,7 +32,7 @@ test('the page shows the subtotal, the shipping fee and the total', () => {
 });
 
 test('free shipping is shown as such', () => {
-  const html = renderCart([{ name: 'Balo', price: 50000, quantity: 1 }]);
+  const html = renderCart([{ id: 'balo', name: 'Balo', price: 50000, quantity: 1 }]);
   assert.match(html, /<dd data-testid="shipping">Miễn phí<\/dd>/);
   assert.match(html, /<dd data-testid="total">50\.000\u00a0₫<\/dd>/);
 });
@@ -42,7 +44,7 @@ test('an empty cart says so, without a table or totals', () => {
 });
 
 test('a product name is escaped, so it cannot add markup to the page', () => {
-  const html = renderCart([{ name: '<script>alert("x")</script> & \'y\'', price: 1000, quantity: 1 }]);
+  const html = renderCart([{ id: 'script', name: '<script>alert("x")</script> & \'y\'', price: 1000, quantity: 1 }]);
   assert.match(html, /<td>&#60;script&#62;alert\(&#34;x&#34;\)&#60;\/script&#62; &#38; &#39;y&#39;<\/td>/);
   assert.doesNotMatch(html, /<script>/);
 });
@@ -63,7 +65,7 @@ test('a coupon in force is taken off the total, while the subtotal and the shipp
 });
 
 test('the shipping fee is reckoned on the subtotal before the discount', () => {
-  const html = renderCart([{ name: 'Balo', price: 55000, quantity: 1 }], applyCoupon({ code: 'GIAM10', applied: '' }));
+  const html = renderCart([{ id: 'balo', name: 'Balo', price: 55000, quantity: 1 }], applyCoupon({ code: 'GIAM10', applied: '' }));
   assert.match(html, /<dd data-testid="shipping">Miễn phí<\/dd>/);
   assert.match(html, /<dd data-testid="total">49\.500\u00a0₫<\/dd>/);
 });
@@ -87,8 +89,10 @@ test('a cart has a coupon form posting to /, with the labelled field [3] and the
   assert.match(html, /<label for="coupon-code">Mã giảm giá<\/label>/);
   assert.match(html, /<input type="text" id="coupon-code" name="code" maxlength="64" value="">/);
   assert.match(html, /<button type="submit">Áp dụng<\/button>/);
-  assert.ok(html.indexOf('</table>') < html.indexOf('<form'), 'the form comes after the table');
-  assert.ok(html.indexOf('</form>') < html.indexOf('<dl>'), 'the form comes before the totals');
+  // The forms of the Xóa buttons are in the table, so the coupon form is found by its label (SPEC of DEMO-20).
+  const label = html.indexOf('<label for="coupon-code">');
+  assert.ok(html.indexOf('</table>') < label, 'the form comes after the table');
+  assert.ok(html.indexOf('</form>', label) < html.indexOf('<dl>'), 'the form comes before the totals');
 });
 
 test('the coupon field is not required, so the server checks it and every browser shows the same message', () => {
@@ -122,19 +126,21 @@ test('a new code replaces the coupon in force, so there is only one discount lin
 });
 
 test('a cart with a subtotal of 55.000 ₫ shows a discount of -5.500 ₫ with GIAM10', () => {
-  const html = renderCart([{ name: 'Balo', price: 55000, quantity: 1 }], applyCoupon({ code: 'GIAM10', applied: '' }));
+  const html = renderCart([{ id: 'balo', name: 'Balo', price: 55000, quantity: 1 }], applyCoupon({ code: 'GIAM10', applied: '' }));
   assert.match(html, /<dd data-testid="discount">-5\.500\u00a0₫<\/dd>/);
 });
 
 test('a discount of nothing is shown as 0 ₫, without a minus sign', () => {
-  const html = renderCart([{ name: 'Kẹo', price: 5, quantity: 1 }], applyCoupon({ code: 'GIAM10', applied: '' }));
+  const html = renderCart([{ id: 'keo', name: 'Kẹo', price: 5, quantity: 1 }], applyCoupon({ code: 'GIAM10', applied: '' }));
   assert.match(html, /<dt>Giảm giá \(GIAM10\)<\/dt><dd data-testid="discount">0\u00a0₫<\/dd>/);
 });
 
+// Every form of the page, the coupon form and the form of each Xóa button, sends the coupon in force once (SPEC of
+// DEMO-20, Tests that change).
 test('a coupon in force goes back with the form in the hidden field applied', () => {
   const html = renderCart(items, applyCoupon({ code: 'GIAM10', applied: '' }));
   assert.match(html, /<form method="post" action="\/">[^]*<input type="hidden" name="applied" value="GIAM10">[^]*<\/form>/);
-  assert.equal(html.match(/name="applied"/g)?.length, 1);
+  assert.equal(html.match(/name="applied"/g)?.length, html.match(/<form/g)?.length);
 });
 
 test('the code of a coupon is escaped in the discount line and in the hidden field', () => {
@@ -184,11 +190,45 @@ test('an accepted code leaves the field empty and without the error attributes',
   assert.doesNotMatch(main(html), /autofocus|aria-invalid|coupon-error/);
 });
 
+// The style has one media query, for the table under 30 rem (design of DEMO-20), and it leaves the coupon form alone
+// (SPEC of DEMO-20, Tests that change).
 test('the style wraps the button under the field when the row is too narrow, without a media query', () => {
   const style = renderCart(items).match(/<style>([^<]*)<\/style>/)?.[1] ?? '';
   assert.match(style, /form\{[^}]*display:flex[^}]*flex-wrap:wrap/);
   assert.match(style, /#coupon-code\{[^}]*flex:1 1 /);
-  assert.doesNotMatch(style, /@media/);
+  assert.equal(style.match(/@media/g)?.length, 1);
+  const query = style.match(/@media[^{]*\{((?:[^{}]*\{[^}]*\})*)\}/)?.[1];
+  assert.ok(query !== undefined, 'the block of the media query is read');
+  assert.doesNotMatch(query, /form|#coupon-code/);
+});
+
+test('the table is in a frame that scrolls sideways, so the page itself never does', () => {
+  const html = renderCart(items);
+  assert.match(html, /<div class="scroll"><table>\n[^]*<\/table><\/div>/);
+  const style = html.match(/<style>([^<]*)<\/style>/)?.[1] ?? '';
+  // position:relative keeps the hidden header of the fifth column inside the frame.
+  assert.ok(style.includes('.scroll{overflow-x:auto;position:relative;'), style);
+});
+
+test('the frame keeps 3 rem clear at its end, so a Xóa button reached by Tab scrolls fully into sight', () => {
+  const style = renderCart(items).match(/<style>([^<]*)<\/style>/)?.[1] ?? '';
+  // Chrome scrolls the frame only for a button wholly out of it; at 320 px each button still shows 7 of its 47 px.
+  assert.ok(style.includes('.scroll{overflow-x:auto;position:relative;scroll-padding-inline-end:3rem}'), style);
+});
+
+test('the style keeps the forms of the Xóa buttons out of the rule of the coupon form, and narrows the page under 30 rem', () => {
+  const style = renderCart(items).match(/<style>([^<]*)<\/style>/)?.[1] ?? '';
+  assert.ok(style.includes('td form{display:block;margin:0}'), style);
+  assert.ok(style.includes('@media (max-width:30rem){body{margin:1rem}th,td{padding:.25rem .5rem}}'), style);
+});
+
+test('the header of the fifth column is hidden from sight only, not from screen readers', () => {
+  const style = renderCart(items).match(/<style>([^<]*)<\/style>/)?.[1] ?? '';
+  const rule = style.match(/\.sr-only\{([^}]*)\}/)?.[1] ?? '';
+  assert.match(rule, /position:absolute/);
+  assert.match(rule, /width:1px;height:1px/);
+  assert.match(rule, /overflow:hidden/);
+  assert.doesNotMatch(rule, /display:none|visibility:hidden/);
 });
 
 test('the style colours message [5] and gives a refused field a thicker border, so the error is not shown by colour alone', () => {
@@ -197,4 +237,94 @@ test('the style colours message [5] and gives a refused field a thicker border, 
   assert.match(style, /#coupon-code\{[^}]*border:1px solid/);
   assert.match(style, /#coupon-code\[aria-invalid="true"\]\{[^}]*border:2px solid/);
   assert.doesNotMatch(style, /outline:(none|0)/, 'the focus ring of the browser stays');
+});
+
+// The row of a line, from its <tr> to its </tr>, found by the name of its product.
+const rowOf = (html: string, name: string): string =>
+  html.match(new RegExp(`<tr data-testid="cart-line"><td>${name}</td>.*?</tr>`))?.[0] ?? '';
+
+// The coupon form, from its <form to its </form>.
+const couponFormOf = (html: string): string => html.match(/<form method="post" action="\/">\n<label for="coupon-code">[^]*?<\/form>/)?.[0] ?? '';
+
+test('each line has one Xóa button named after its product, the submit button of a POST / form of its own', () => {
+  const html = renderCart(items);
+  assert.match(
+    rowOf(html, 'Bút bi'),
+    /<td><form method="post" action="\/"><button type="submit" name="remove" value="but-bi" aria-label="Xóa Bút bi">Xóa<\/button><\/form><\/td><\/tr>$/,
+  );
+  assert.match(
+    rowOf(html, 'Sổ tay'),
+    /<td><form method="post" action="\/"><button type="submit" name="remove" value="so-tay" aria-label="Xóa Sổ tay">Xóa<\/button><\/form><\/td><\/tr>$/,
+  );
+  assert.equal(html.match(/name="remove"/g)?.length, 2);
+  assert.equal(html.match(/<form method="post" action="\/">/g)?.length, 3, 'a form for each line, and the coupon form');
+});
+
+test('the fifth column has a header that only screen readers read: Thao tác', () => {
+  const html = renderCart(items);
+  assert.match(html, /<th scope="col">Thành tiền<\/th><th scope="col"><span class="sr-only">Thao tác<\/span><\/th><\/tr><\/thead>/);
+});
+
+test('a line id and a product name are escaped in the value and the label of the Xóa button', () => {
+  const html = renderCart([{ id: '"><b>id</b>', name: '<b>"Bút" & \'bi\'</b>', price: 1000, quantity: 1 }]);
+  assert.match(html, /name="remove" value="&#34;&#62;&#60;b&#62;id&#60;\/b&#62;"/);
+  assert.match(html, /aria-label="Xóa &#60;b&#62;&#34;Bút&#34; &#38; &#39;bi&#39;&#60;\/b&#62;">Xóa<\/button>/);
+  assert.doesNotMatch(html, /<b>/);
+});
+
+test('a coupon in force goes with the form of each Xóa button, before the button', () => {
+  const html = renderCart(items, applyCoupon({ code: 'GIAM10', applied: '' }));
+  for (const [name, id] of [['Bút bi', 'but-bi'], ['Sổ tay', 'so-tay']]) {
+    assert.match(
+      rowOf(html, name),
+      new RegExp(`<form method="post" action="/"><input type="hidden" name="applied" value="GIAM10"><button type="submit" name="remove" value="${id}"`),
+      name,
+    );
+  }
+});
+
+// Every form of a page, from its <form to its </form>.
+const formsOf = (html: string): string[] => html.match(/<form [^]*?<\/form>/g) ?? [];
+
+test('the lines removed before go back with every form, each id once per form and in order, before the coupon in force', () => {
+  const html = renderCart([items[1]], applyCoupon({ code: 'GIAM10', applied: '' }), ['but-bi', 'hop-but']);
+  const forms = formsOf(html);
+  assert.equal(forms.length, 2, 'the form of the Xóa button of Sổ tay, and the coupon form');
+  for (const form of forms) {
+    assert.equal(form.match(/<input type="hidden" name="removed" value="but-bi">/g)?.length, 1, form);
+    assert.equal(form.match(/<input type="hidden" name="removed" value="hop-but">/g)?.length, 1, form);
+  }
+  assert.match(
+    forms[0],
+    /^<form method="post" action="\/"><input type="hidden" name="removed" value="but-bi"><input type="hidden" name="removed" value="hop-but"><input type="hidden" name="applied" value="GIAM10"><button type="submit" name="remove" value="so-tay"/,
+  );
+  assert.match(
+    forms[1],
+    /<button type="submit">Áp dụng<\/button>\n<input type="hidden" name="removed" value="but-bi">\n<input type="hidden" name="removed" value="hop-but">\n<input type="hidden" name="applied" value="GIAM10">\n<\/form>$/,
+  );
+});
+
+test('in the coupon form the lines removed before come after the button and before message [5]', () => {
+  const html = renderCart([items[1]], applyCoupon({ code: 'SAIMA', applied: '' }), ['but-bi']);
+  assert.match(couponFormOf(html), /<button type="submit">Áp dụng<\/button>\n<input type="hidden" name="removed" value="but-bi">\n<p id="coupon-error"/);
+});
+
+test('the id of a line removed before is escaped in its hidden field', () => {
+  const html = renderCart(items, NO_COUPON, ['"><b>x</b>']);
+  assert.equal(html.match(/<input type="hidden" name="removed" value="&#34;&#62;&#60;b&#62;x&#60;\/b&#62;">/g)?.length, 3);
+  assert.doesNotMatch(html, /<b>/);
+});
+
+test('an empty cart ignores the lines removed before, as it ignores the coupon', () => {
+  assert.equal(renderCart([], applyCoupon({ code: 'GIAM10', applied: '' }), ['but-bi', 'so-tay']), renderCart([]));
+});
+
+// Enter in the coupon field sends its form through the first submit button of that form, so a Xóa button there would
+// remove a line (SPEC of DEMO-20, Never).
+test('the coupon form has no Xóa button, and no button is tied to a form by the attribute form', () => {
+  const html = renderCart(items, applyCoupon({ code: 'SAIMA', applied: 'GIAM10' }));
+  const form = couponFormOf(html);
+  assert.match(form, /<button type="submit">Áp dụng<\/button>/);
+  assert.doesNotMatch(form, /name="remove"|Xóa/);
+  assert.doesNotMatch(html, /\sform=/);
 });

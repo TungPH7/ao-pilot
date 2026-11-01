@@ -1,12 +1,13 @@
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { applyCoupon } from './coupon.ts';
+import { checkLineIds, removeLines } from './cart.ts';
+import { applyCoupon, keepCoupon } from './coupon.ts';
 import { renderCart, type CartItem } from './page.ts';
 
 // The cart the page shows until the cart has a store: two lines, a subtotal of 39.000 ₫, so shipping is charged.
 export const SAMPLE_CART: CartItem[] = [
-  { name: 'Bút bi', price: 5000, quantity: 3 },
-  { name: 'Sổ tay', price: 12000, quantity: 2 },
+  { id: 'but-bi', name: 'Bút bi', price: 5000, quantity: 3 },
+  { id: 'so-tay', name: 'Sổ tay', price: 12000, quantity: 2 },
 ];
 
 // The page has no script, so the policy allows none; the style is inline. Forms may post only to this server.
@@ -26,13 +27,16 @@ function ownHost(request: IncomingMessage, port: number): string | undefined {
   return count === 1 && (host === `127.0.0.1:${port}` || host === `localhost:${port}`) ? host : undefined;
 }
 
-// The cart page at /: GET and HEAD answer the page made once, POST / the page with the coupon of its form. The
-// checks run in the order of the plan: a Host that does not name this server is 400, before anything else (AC11);
-// another path is 404; another method 405; a POST without the Origin of this server 403, before its body is read
-// (AC9); a body over BODY_LIMIT bytes 413 (AC10). The path is the request target up to its query string, read as is:
-// `//` or `//host/` is not /. A cart the page cannot show (total() throws a RangeError) fails here and not on a
-// request, and discount() does not throw on a subtotal that total() returned.
+// The cart page at /: GET and HEAD answer the page made once, POST / the page of the lines that stay once the lines
+// of its form are removed, with the coupon of its form. The checks run in the order of the plan: a Host that does not
+// name this server is 400, before anything else (AC11 of DEMO-11); another path is 404; another method 405; a POST
+// without the Origin of this server 403, before its body is read (AC9 of DEMO-11); a body over BODY_LIMIT bytes 413
+// (AC10 of DEMO-11). The path is the request target up to its query string, read as is: `//` or `//host/` is not /.
+// A cart the page cannot show (total() throws a RangeError) fails here and not on a request, and discount() does not
+// throw on a subtotal that total() returned. A cart whose lines do not each have an id of their own fails here too
+// (checkLineIds() throws a RangeError).
 export function cartServer(items: CartItem[] = SAMPLE_CART): Server {
+  checkLineIds(items);
   const page = renderCart(items);
   // requireHostHeader: false lets the server answer an HTTP/1.1 request without a Host with its own 400, as text.
   const server = createServer({ requireHostHeader: false }, (request, response) => {
@@ -53,10 +57,17 @@ export function cartServer(items: CartItem[] = SAMPLE_CART): Server {
       readBody(
         request,
         (body) => {
-          // Any Content-Type is read as a form; bytes that are not UTF-8 become U+FFFD, an unknown code (plan, POST /).
+          // Any Content-Type is read as a form; bytes that are not UTF-8 become U+FFFD, an unknown code or line id
+          // (plan, POST /). Only remove, removed, code and applied are read: every name, price, quantity and amount
+          // comes from the server cart (AC11 of DEMO-20).
           const form = new URLSearchParams(body);
-          const coupon = applyCoupon({ code: form.get('code') ?? '', applied: form.get('applied') ?? '' });
-          response.writeHead(200, PAGE_HEADERS).end(renderCart(items, coupon));
+          const remove = form.get('remove'); // a remove request whenever the field is there, even empty
+          const sent = form.getAll('removed');
+          const { kept, removed } = removeLines(items, remove === null ? sent : [...sent, remove]);
+          const applied = form.get('applied') ?? '';
+          // A remove request reads no code, so it never shows a message about one.
+          const coupon = remove === null ? applyCoupon({ code: form.get('code') ?? '', applied }) : keepCoupon(applied);
+          response.writeHead(200, PAGE_HEADERS).end(renderCart(kept, coupon, removed));
         },
         // Connection: close lets Node drop the rest of the body instead of reading it to keep the connection (AC10).
         () => response.writeHead(413, { ...TEXT_HEADERS, Connection: 'close' }).end('Payload too large'),

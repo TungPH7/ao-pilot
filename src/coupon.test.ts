@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyCoupon, COUPONS, discount, findCoupon, NO_COUPON, type Coupon } from './coupon.ts';
+import { applyCoupon, COUPONS, discount, findCoupon, keepCoupon, NO_COUPON, type Coupon } from './coupon.ts';
 
 const GIAM10: Coupon = { code: 'GIAM10', kind: 'percent', value: 10 };
 const GIAM20K: Coupon = { code: 'GIAM20K', kind: 'amount', value: 20000 };
@@ -86,4 +86,16 @@ test('the coupons of the list cannot be changed by the code that uses them', () 
     applied.value = 100;
   }, TypeError);
   assert.equal(discount(GIAM10, 39000), 3900);
+});
+
+test('a form that sends no code keeps the coupon in force, checked against the list again, without a message', () => {
+  assert.deepEqual(keepCoupon('GIAM10'), { applied: GIAM10, rejected: null });
+  assert.deepEqual(keepCoupon(' giam10 '), { applied: GIAM10, rejected: null }, 'trimmed and upper-cased');
+  assert.deepEqual(keepCoupon('GIAM20K'), { applied: GIAM20K, rejected: null });
+});
+
+test('a form that sends no code and no coupon in force, or one that is not in the list, has no coupon and no message', () => {
+  for (const applied of ['', '   ', 'GIAM99', 'SAIMA', '"><b>x</b>', '\uFFFD']) {
+    assert.deepEqual(keepCoupon(applied), NO_COUPON, JSON.stringify(applied));
+  }
 });
