@@ -27,10 +27,13 @@ const STYLE = 'body{font-family:system-ui,sans-serif;margin:2rem}table{border-co
   + 'dl{display:grid;grid-template-columns:max-content max-content;gap:.25rem 1rem}';
 
 // The cart page as a whole HTML document: one row per item, then the subtotal, the shipping fee and the total, less
-// the discount of the coupon in force. An empty cart ignores the coupon. Throws the RangeError of total() when an item
-// has a bad price or quantity.
-export function renderCart(items: CartItem[], coupon: CouponState = NO_COUPON): string {
-  const body = items.length === 0 ? '<p data-testid="empty-cart">Giỏ hàng trống.</p>' : cartTable(items, coupon);
+// the discount of the coupon in force. items: the lines that stay, already taken from the server cart. removed: the ids
+// of the lines removed before, from the server cart, which every form of the page sends back in hidden fields. An empty
+// cart ignores both the coupon and removed. Throws the RangeError of total() when an item has a bad price or quantity.
+export function renderCart(items: CartItem[], coupon: CouponState = NO_COUPON, removed: readonly string[] = []): string {
+  const body = items.length === 0
+    ? '<p data-testid="empty-cart">Giỏ hàng trống.</p>'
+    : cartTable(items, coupon, hiddenFields(coupon, removed));
   return `<!doctype html>
 <html lang="vi">
 <head>
@@ -55,31 +58,38 @@ const MESSAGES: Record<'empty' | 'invalid', string> = {
   invalid: 'Mã giảm giá không hợp lệ.',
 };
 
-// The coupon form of S1: field [3], button [4], and the coupon in force in the hidden field applied, which the server
-// checks again. It posts to / as application/x-www-form-urlencoded, the default of a form. The field is not required,
-// so the server checks it and every browser shows the same message.
-function couponForm(coupon: CouponState): string {
-  const { applied, rejected } = coupon;
+// The hidden fields that every form of the page sends: one removed for each line removed before, in that order, then
+// the coupon in force in applied, which the server checks again.
+function hiddenFields(coupon: CouponState, removed: readonly string[]): string[] {
+  const fields = removed.map((id) => `<input type="hidden" name="removed" value="${escapeHtml(id)}">`);
+  if (coupon.applied !== null) fields.push(`<input type="hidden" name="applied" value="${escapeHtml(coupon.applied.code)}">`);
+  return fields;
+}
+
+// The coupon form of S1: field [3], button [4], then the hidden fields, the lines removed before and the coupon in
+// force. It posts to / as application/x-www-form-urlencoded, the default of a form. The field is not required, so the
+// server checks it and every browser shows the same message.
+function couponForm(coupon: CouponState, hidden: readonly string[]): string {
+  const { rejected } = coupon;
   // A refused code goes back into the field as typed, and the field points to message [5]; an accepted one does not.
   const field = rejected === null
     ? 'value=""'
     : `value="${escapeHtml(rejected.typed)}" autofocus aria-invalid="true" aria-describedby="coupon-error"`;
-  const hidden = applied === null ? '' : `\n<input type="hidden" name="applied" value="${escapeHtml(applied.code)}">`;
+  const fields = hidden.map((input) => `\n${input}`).join('');
   const message = rejected === null ? '' : `\n<p id="coupon-error" data-testid="coupon-error">${MESSAGES[rejected.reason]}</p>`;
   return `<form method="post" action="/">
 <label for="coupon-code">Mã giảm giá</label>
 <input type="text" id="coupon-code" name="code" maxlength="64" ${field}>
-<button type="submit">Áp dụng</button>${hidden}${message}
+<button type="submit">Áp dụng</button>${fields}${message}
 </form>`;
 }
 
 // The form of the Xóa button of a line: a POST / form of its own, never the coupon form, since Enter in the coupon field
-// sends its form through the first submit button of that form. It sends the id of the line and the coupon in force,
+// sends its form through the first submit button of that form. It sends the id of the line with the hidden fields,
 // never the coupon field, a name, a price or an amount. The label names the product, so a screen reader tells the
 // buttons apart, and starts with the word shown.
-function removeForm(item: CartItem, coupon: CouponState): string {
-  const hidden = coupon.applied === null ? '' : `<input type="hidden" name="applied" value="${escapeHtml(coupon.applied.code)}">`;
-  return `<form method="post" action="/">${hidden}<button type="submit" name="remove" value="${escapeHtml(item.id)}" aria-label="Xóa ${escapeHtml(item.name)}">Xóa</button></form>`;
+function removeForm(item: CartItem, hidden: readonly string[]): string {
+  return `<form method="post" action="/">${hidden.join('')}<button type="submit" name="remove" value="${escapeHtml(item.id)}" aria-label="Xóa ${escapeHtml(item.name)}">Xóa</button></form>`;
 }
 
 // Line [7] of the coupon in force, as a minus amount. A discount of nothing is "0 ₫", since formatMoney(-0) is "-0 ₫".
@@ -87,9 +97,9 @@ function discountLine(coupon: Coupon, off: number): string {
   return `\n<dt>Giảm giá (${escapeHtml(coupon.code)})</dt><dd data-testid="discount">${formatMoney(off === 0 ? 0 : -off)}</dd>`;
 }
 
-function cartTable(items: CartItem[], coupon: CouponState): string {
+function cartTable(items: CartItem[], coupon: CouponState, hidden: readonly string[]): string {
   const rows = items
-    .map((item) => `<tr data-testid="cart-line"><td>${escapeHtml(item.name)}</td><td>${formatMoney(item.price)}</td><td>${item.quantity}</td><td>${formatMoney(item.price * item.quantity)}</td><td>${removeForm(item, coupon)}</td></tr>`)
+    .map((item) => `<tr data-testid="cart-line"><td>${escapeHtml(item.name)}</td><td>${formatMoney(item.price)}</td><td>${item.quantity}</td><td>${formatMoney(item.price * item.quantity)}</td><td>${removeForm(item, hidden)}</td></tr>`)
     .join('\n');
   const subtotal = total(items);
   // The shipping fee is reckoned on the subtotal before the discount, so shipping() does not change.
@@ -101,7 +111,7 @@ function cartTable(items: CartItem[], coupon: CouponState): string {
 ${rows}
 </tbody>
 </table>
-${couponForm(coupon)}
+${couponForm(coupon, hidden)}
 <dl>
 <dt>Tạm tính</dt><dd data-testid="subtotal">${formatMoney(subtotal)}</dd>${coupon.applied === null ? '' : discountLine(coupon.applied, off)}
 <dt>Phí vận chuyển</dt><dd data-testid="shipping">${fee === 0 ? 'Miễn phí' : formatMoney(fee)}</dd>

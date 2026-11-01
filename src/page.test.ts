@@ -249,6 +249,42 @@ test('a coupon in force goes with the form of each Xóa button, before the butto
   }
 });
 
+// Every form of a page, from its <form to its </form>.
+const formsOf = (html: string): string[] => html.match(/<form [^]*?<\/form>/g) ?? [];
+
+test('the lines removed before go back with every form, each id once per form and in order, before the coupon in force', () => {
+  const html = renderCart([items[1]], applyCoupon({ code: 'GIAM10', applied: '' }), ['but-bi', 'hop-but']);
+  const forms = formsOf(html);
+  assert.equal(forms.length, 2, 'the form of the Xóa button of Sổ tay, and the coupon form');
+  for (const form of forms) {
+    assert.equal(form.match(/<input type="hidden" name="removed" value="but-bi">/g)?.length, 1, form);
+    assert.equal(form.match(/<input type="hidden" name="removed" value="hop-but">/g)?.length, 1, form);
+  }
+  assert.match(
+    forms[0],
+    /^<form method="post" action="\/"><input type="hidden" name="removed" value="but-bi"><input type="hidden" name="removed" value="hop-but"><input type="hidden" name="applied" value="GIAM10"><button type="submit" name="remove" value="so-tay"/,
+  );
+  assert.match(
+    forms[1],
+    /<button type="submit">Áp dụng<\/button>\n<input type="hidden" name="removed" value="but-bi">\n<input type="hidden" name="removed" value="hop-but">\n<input type="hidden" name="applied" value="GIAM10">\n<\/form>$/,
+  );
+});
+
+test('in the coupon form the lines removed before come after the button and before message [5]', () => {
+  const html = renderCart([items[1]], applyCoupon({ code: 'SAIMA', applied: '' }), ['but-bi']);
+  assert.match(couponFormOf(html), /<button type="submit">Áp dụng<\/button>\n<input type="hidden" name="removed" value="but-bi">\n<p id="coupon-error"/);
+});
+
+test('the id of a line removed before is escaped in its hidden field', () => {
+  const html = renderCart(items, NO_COUPON, ['"><b>x</b>']);
+  assert.equal(html.match(/<input type="hidden" name="removed" value="&#34;&#62;&#60;b&#62;x&#60;\/b&#62;">/g)?.length, 3);
+  assert.doesNotMatch(html, /<b>/);
+});
+
+test('an empty cart ignores the lines removed before, as it ignores the coupon', () => {
+  assert.equal(renderCart([], applyCoupon({ code: 'GIAM10', applied: '' }), ['but-bi', 'so-tay']), renderCart([]));
+});
+
 // Enter in the coupon field sends its form through the first submit button of that form, so a Xóa button there would
 // remove a line (SPEC of DEMO-20, Never).
 test('the coupon form has no Xóa button, and no button is tied to a form by the attribute form', () => {

@@ -63,11 +63,11 @@ export function cartServer(items: CartItem[] = SAMPLE_CART): Server {
           const form = new URLSearchParams(body);
           const remove = form.get('remove'); // a remove request whenever the field is there, even empty
           const sent = form.getAll('removed');
-          const { kept } = removeLines(items, remove === null ? sent : [...sent, remove]);
+          const { kept, removed } = removeLines(items, remove === null ? sent : [...sent, remove]);
           const applied = form.get('applied') ?? '';
           // A remove request reads no code, so it never shows a message about one.
           const coupon = remove === null ? applyCoupon({ code: form.get('code') ?? '', applied }) : keepCoupon(applied);
-          response.writeHead(200, PAGE_HEADERS).end(renderCart(kept, coupon));
+          response.writeHead(200, PAGE_HEADERS).end(renderCart(kept, coupon, removed));
         },
         // Connection: close lets Node drop the rest of the body instead of reading it to keep the connection (AC10).
         () => response.writeHead(413, { ...TEXT_HEADERS, Connection: 'close' }).end('Payload too large'),

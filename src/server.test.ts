@@ -578,6 +578,19 @@ test('a line id sent in the form never reaches the page, whether it is a line of
   assert.doesNotMatch(html, /script|khong-co/i);
 });
 
+// The page writes back the ids of the lines removed, taken from the server cart: each once, in every form, and never a
+// string of the request.
+test('every form of the page sends back each line removed once, and no id that is not a line of the cart', async (t) => {
+  const url = await start(t);
+  const html = await (await post(url, 'removed=but-bi&removed=but-bi&removed=khong-co&removed=%3Cscript%3E&code=')).text();
+  const forms = html.match(/<form [^]*?<\/form>/g) ?? [];
+  assert.equal(forms.length, 2, 'the form of the Xóa button of Sổ tay, and the coupon form');
+  for (const form of forms) {
+    assert.equal(form.match(/name="removed" value="but-bi"/g)?.length, 1, form);
+  }
+  assert.doesNotMatch(html, /khong-co|script/i);
+});
+
 test('the same form sent again gives the same page, so a reload after a remove takes out no other line', async (t) => {
   const url = await start(t);
   for (const body of ['applied=GIAM10&remove=but-bi', 'removed=but-bi&code=GIAM20K', 'removed=but-bi&remove=so-tay']) {
