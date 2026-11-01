@@ -249,15 +249,15 @@ td form{display:block;margin:0}
 
 ## Task List
 
-`ba` tạo Story và hai Sub-task trên Jira theo plan này, rồi điền mã Jira vào chỗ `<…>` dưới đây.
+`ba` đã tạo Story và hai Sub-task trên Jira theo plan này ngày 2026-11-01: DEMO-21, DEMO-22 và DEMO-23. Cả ba ở trạng thái đầu của workflow, chờ gate ②.
 
-- Nhánh của Story là `feature/<KEY của Story>-remove-from-cart`, tách từ `develop`. Hai Sub-task commit lên nhánh này, BE trước.
+- Nhánh của Story là `feature/DEMO-21-remove-from-cart`, tách từ `develop`. Hai Sub-task commit lên nhánh này, BE trước.
 - Story không phụ thuộc item Jira nào. `develop` đã có DEMO-10 và DEMO-12 (commit `6c25b8b` và `26c8ddb`; tôi kiểm ngày 2026-11-01).
 - Story sang ready khi plan được duyệt.
 
 ### Phase 1: Server
-- [ ] `<Story>`: Xóa sản phẩm khỏi giỏ hàng (AC1–AC11; S1, khối S1.2–S1.10) · be-dev, fe-dev (Sub-task)
-- [ ] `<Sub-task BE>`: BE: mã dòng và yêu cầu xóa của `POST /` (AC10, AC11, phần server của AC1–AC9; S1.7–S1.10) · be-dev
+- [ ] DEMO-21: Xóa sản phẩm khỏi giỏ hàng (AC1–AC11; S1, khối S1.2–S1.10) · be-dev, fe-dev (Sub-task)
+- [ ] DEMO-22: BE: mã dòng và yêu cầu xóa của `POST /` (AC10, AC11, phần server của AC1–AC9; S1.7–S1.10) · be-dev
 
 ### Checkpoint: Server
 - [ ] `npm run lint`, `npm run typecheck` và `npm test` xanh.
@@ -265,7 +265,7 @@ td form{display:block;margin:0}
 - [ ] `npm run test:e2e`: E2E của DEMO-10 và DEMO-11 vẫn pass, không đổi; AC10, AC11 của DEMO-20 pass.
 
 ### Phase 2: Trang
-- [ ] `<Sub-task FE>`: FE: nút Xóa, trường ẩn và bố cục của S1 (AC1–AC9; S1.2, S1.3, S1.4, S1.5, S1.6) · fe-dev
+- [ ] DEMO-23: FE: nút Xóa, trường ẩn và bố cục của S1 (AC1–AC9; S1.2, S1.3, S1.4, S1.5, S1.6) · fe-dev
 
 ### Checkpoint: Story
 - [ ] E2E của AC1–AC11 (DEMO-20), AC1–AC11 (DEMO-11) và AC1, AC2 (DEMO-10, AC1 đổi theo ô mới) pass trên Chrome.
@@ -273,7 +273,7 @@ td form{display:block;margin:0}
 - [ ] Kiểm tay S1 ở 320, 360, 768, 1024 và 1440 px.
 - [ ] Mở PR của Story.
 
-### Sub-task BE (`be-dev`)
+### Sub-task BE DEMO-22 (`be-dev`)
 
 - AC:
   - Toàn bộ AC10 và AC11, kể cả E2E.
@@ -321,7 +321,7 @@ td form{display:block;margin:0}
   7. Cập nhật README.
 - Phụ thuộc: không có.
 
-### Sub-task FE (`fe-dev`)
+### Sub-task FE DEMO-23 (`fe-dev`)
 
 - AC: AC1–AC9, phần trang và E2E.
 - Design:
@@ -361,7 +361,7 @@ td form{display:block;margin:0}
   - Ở 320 px, Tab tới nút "Xóa" thì khung tự cuộn tới nút. Viền focus vẫn hiện.
 - Phụ thuộc: Sub-task BE đã commit lên nhánh của Story.
 
-### Verification của Story
+### Verification của Story DEMO-21
 
 ```
 npm run lint && npm run typecheck && npm test
