@@ -90,7 +90,8 @@ blocks:
     type: table
     content: >-
       Năm cột. Bốn ô đầu của mỗi dòng không đổi: tên, đơn giá, số lượng, thành tiền (DEMO-10). Ô thứ năm chứa [3].
-      Dòng giữ data-testid="cart-line". Tiêu đề cột thứ năm là chữ ẩn "Thao tác" (câu chữ mới, Open Questions Q1).
+      Dòng giữ data-testid="cart-line". Tiêu đề cột thứ năm là chữ ẩn "Thao tác", chỉ cho trình đọc màn hình, không
+      hiện. Đây là câu chữ mới, đã được duyệt ngày 2026-11-01.
     behavior: >-
       Xóa một dòng thì bảng còn các dòng kia, đúng thứ tự cũ. Bảng nằm trong một khung cuộn ngang (mục Bố cục theo
       cỡ màn hình), để trang không bao giờ cuộn ngang.
@@ -101,7 +102,8 @@ blocks:
         áp mã (AC7, AC8).
       empty: >-
         Xóa hết thì trang hiện "Giỏ hàng trống." (data-testid="empty-cart") và không có [3] đến [10], kể cả ô nhập mã
-        và mã đang áp. Không có nút hay liên kết nào (Open Questions Q6).
+        và mã đang áp. Không có nút hay liên kết nào, đúng như SPEC; quyết định ngày 2026-11-01. Nút tải lại của trình
+        duyệt gửi lại form xóa nên vẫn ra giỏ trống; muốn có lại giỏ mẫu phải mở / bằng một lần điều hướng mới.
     a11y: >-
       Giữ th scope="col" cho bốn cột đầu. Cột thứ năm có th scope="col" với chữ ẩn "Thao tác", để cột không có tiêu
       đề rỗng. Khung cuộn không cần tabindex: nó chứa các nút [3] nhận focus được, và Tab tới nút thì trình duyệt
@@ -118,7 +120,11 @@ blocks:
       và không dùng thuộc tính form để gắn vào đó. Bấm nút gửi mã dòng cần xóa, các dòng đã xóa và mã đang áp; không gửi
       tên, đơn giá, số lượng hay số tiền, và không gửi ô [4]. Tên các trường ẩn là việc của sa trong plan. Server trả
       thẳng trang 200 với giỏ còn lại. Chữ đã gõ vào [4] mà chưa bấm [5] bị bỏ, thông báo lỗi [6] của lần trước biến mất,
-      mã đang áp vẫn giữ. Gửi lại cùng form cho cùng trang.
+      mã đang áp vẫn giữ. Gửi lại cùng form cho cùng trang. Không hỏi xác nhận và không có câu báo sau khi xóa, kể cả
+      cho trình đọc màn hình (quyết định Q1 và Q2 của SPEC, giữ nguyên ngày 2026-11-01): dòng biến mất và các con số
+      đổi là đủ. Sau khi xóa, dòng kế tiếp dời lên chỗ nút vừa bấm, nên một cú nhấp đúp có thể xóa hai dòng; rủi ro
+      này đã được chấp nhận ngày 2026-11-01, vì mở lại / bằng GET có lại giỏ mẫu. Bấm hai lần khi trang cũ còn hiện chỉ
+      gửi lại cùng form, cho cùng kết quả.
     states:
       default: Kiểu nút của trang, cùng kiểu với [5]; không thêm màu cảnh báo, vì trang chỉ có một màu thêm là màu chữ lỗi của [6]
       hover: Kiểu mặc định của trình duyệt
@@ -130,7 +136,9 @@ blocks:
       khớp đúng một nút; tên "Xóa" khớp cả hai, nên test tìm theo tên đầy đủ. Vùng bấm tối thiểu 24x24 px (WCAG 2.2
       2.5.8); trên prototype nút đo 47x33 px và hai nút cách nhau 8 px theo chiều dọc. Thứ tự Tab: các nút [3] từ
       trên xuống, rồi [4], rồi [5]. Sau khi xóa, trang tải mới: focus về đầu trang và Tab đầu tiên tới nút [3] đầu
-      tiên còn lại; không dùng autofocus (Open Questions Q4).
+      tiên còn lại. Không dùng autofocus (quyết định ngày 2026-11-01): autofocus trên mọi trang trả lời POST / sẽ
+      làm bất ngờ, và DEMO-11 còn ghi chưa kiểm autofocus trên Chrome với CSP của trang. [Unverified] Chưa thử với
+      trình đọc màn hình nào; vì trang không có câu báo sau khi xóa, qa nên nghe thử một lần.
     ac: [AC1, AC2, AC3, AC4, AC5, AC6, AC10, AC11]
   4:
     name: Ô nhập mã giảm giá
@@ -217,18 +225,12 @@ Bố cục theo cỡ màn hình:
 | 768 px | trang vừa | trang vừa | trang vừa |
 | 1024, 1440 px | trang vừa | trang vừa | không đo |
 
-- Khung cuộn riêng, không có luật dưới 30 rem, chưa đủ: nút Xóa vẫn ngoài khung ở 360 và 375 px (đo). Vì vậy đề xuất gồm cả hai (Open Questions Q2).
+- Khung cuộn riêng, không có luật dưới 30 rem, chưa đủ: nút Xóa vẫn ngoài khung ở 360 và 375 px (đo). Vì vậy bố cục gồm cả hai.
+- Quyết định ngày 2026-11-01: dùng khung cuộn ngang và hai luật dưới 30 rem. Hai luật đó là một media query, khác hàng [4] [5] của DEMO-11 không dùng media query; chỉ có một query này. Epic không xếp mỗi dòng thành khối dọc trên màn hình hẹp; nếu cần, tách một Task riêng.
 - Ở 320 px nút Xóa chưa hiện đủ khi mở trang: người dùng cuộn khung, hoặc Tab tới nút thì khung tự cuộn tới nút (đo). Cỡ 320 px không bắt buộc cuộn hai chiều cho nội dung ngoài bảng; bảng dữ liệu được miễn khỏi WCAG 1.4.10.
 - Chưa kiểm: bố cục trên code thật, với tên sản phẩm dài hay giá lớn hơn giỏ mẫu. `fe-dev` và `qa` kiểm trang ở 320, 768, 1024 và 1440 px, và ở 360 px nếu test được.
 - Ngoài phạm vi, nên không có màn hình hay trạng thái: hỏi xác nhận trước khi xóa, thông báo sau khi xóa, hoàn tác, thêm lại dòng đã xóa, đổi số lượng.
 
 ## Open Questions
 
-Phiên này chạy một mình, nên mỗi câu có đề xuất của `ux`. Bạn duyệt chúng cùng design ở gate ①.
-
-- **Q1. Tiêu đề cột thứ năm.** Cột mới cần một `th`; `th` rỗng bị các công cụ kiểm a11y báo, mà mục Business rules của SPEC chỉ chốt câu chữ "Xóa". Đề xuất: chữ ẩn "Thao tác", chỉ cho trình đọc màn hình, không hiện. Đây là câu chữ mới nên cần bạn duyệt. Nếu không duyệt: `th` rỗng, nút [3] vẫn có tên truy cập riêng.
-- **Q2. Bảng năm cột trên màn hình hẹp.** Hôm nay bảng bốn cột đã tràn 17 px ở 320 px; DEMO-11 ghi "không sửa trong Epic này". Cột mới làm tràn 87 px ở 320 px, đẩy nút Xóa của Epic ra ngoài màn hình ở 320 px và chỉ hiện một phần ở 360 và 390 px (số đo ở mục Bố cục), nên Epic này không thể bỏ qua. Đề xuất: khung cuộn ngang cho bảng và hai luật dưới 30 rem (lề, đệm ô). Luật này là một media query, trong khi DEMO-11 chọn hàng mã không dùng media query; hai chuyện khác nhau, nhưng cần bạn biết. Cách khác: xếp mỗi dòng thành khối dọc trên màn hình hẹp. Cách đó cần nhãn cho từng ô, và `display` khối trên phần tử bảng có thể làm mất nghĩa bảng với trình đọc màn hình [Unverified, chưa thử]; đề xuất tách thành một Task riêng nếu bạn muốn.
-- **Q3. Câu báo cho trình đọc màn hình sau khi xóa** (SPEC mời `ux` đề xuất). Đề xuất: không thêm câu nào, giữ quyết định Q2 của SPEC. Lý do: trang tải mới thì trình đọc đọc tiêu đề và h1; bảng báo số dòng khi vào bảng; giỏ trống tự có câu "Giỏ hàng trống." [Unverified] Tôi chưa thử với trình đọc màn hình nào, nên `qa` hoặc bạn nên nghe thử một lần. Nếu bạn muốn có câu: "Đã xóa Bút bi khỏi giỏ hàng." (tên sản phẩm qua escapeHtml), một đoạn văn thường ngay dưới [1], không phải vùng `aria-live`, vì vùng có sẵn lúc tải trang có thể không được đọc. Khi đó `ux` thêm một khối, và AC1 thêm một điều kiện.
-- **Q4. Focus sau khi xóa.** Đề xuất: không `autofocus`. Trang tải mới nên focus về đầu trang, và vì các nút [3] đứng đầu thứ tự Tab, một lần Tab tới nút của dòng đầu tiên còn lại. `autofocus` trên mọi trang trả lời `POST /` sẽ làm bất ngờ, và DEMO-11 còn ghi chưa kiểm `autofocus` trên Chrome với CSP của trang.
-- **Q5. Bấm nhanh xóa nhầm hai dòng.** Không hỏi xác nhận và không hoàn tác là quyết định của SPEC (Q1). Hệ quả: sau khi xóa, dòng kế tiếp dời lên đúng chỗ nút vừa bấm; nếu trang mới hiện giữa hai lần bấm của một cú nhấp đúp, lần bấm thứ hai xóa dòng kế tiếp [Unverified, chưa thử]. Bấm hai lần khi trang cũ còn hiện chỉ gửi lại cùng form, cho cùng kết quả. Đề xuất: chấp nhận, vì giỏ mẫu mở lại đủ dòng bằng `GET /`; nút cách nhau 8 px, không chồng nhau.
-- **Q6. Giỏ trống không có việc nào để làm.** Trang chỉ có "Giỏ hàng trống.", đúng như SPEC. Hệ quả: nút tải lại của trình duyệt gửi lại form xóa nên vẫn ra giỏ trống; muốn có lại giỏ mẫu phải mở `/` bằng một lần điều hướng mới. Đề xuất: giữ nguyên, vì Epic không lưu giỏ và không thêm câu chữ.
+Không còn câu hỏi mở. Các câu Q1–Q6 của bản trước được trả lời ngày 2026-11-01 ("Theo đề xuất"): bạn chọn đề xuất của `ux` ở cả sáu câu. Các câu trả lời đã thành quyết định ở khối [2] (chữ ẩn "Thao tác", giỏ trống), khối [3] (không câu báo, không autofocus, rủi ro bấm nhanh) và mục Bố cục theo cỡ màn hình của S1 (khung cuộn ngang và luật dưới 30 rem).
