@@ -24,7 +24,13 @@ const STYLE = 'body{font-family:system-ui,sans-serif;margin:2rem}table{border-co
   + 'form{display:flex;flex-wrap:wrap;gap:.5rem;max-width:32rem;margin:1rem 0}label,#coupon-error{flex:1 0 100%;margin:0}'
   + 'input,button{font:inherit;padding:.25rem .5rem}#coupon-code{flex:1 1 12rem;min-width:0;border:1px solid}'
   + '#coupon-code[aria-invalid="true"]{border:2px solid #b00020}#coupon-error{color:#b00020}'
-  + 'dl{display:grid;grid-template-columns:max-content max-content;gap:.25rem 1rem}';
+  + 'dl{display:grid;grid-template-columns:max-content max-content;gap:.25rem 1rem}'
+  // The table scrolls sideways in its frame, so the page never does; position:relative keeps the hidden header of the
+  // fifth column inside the frame. The form of a Xóa button is a plain block, not the flex row of the coupon form. Under
+  // 30 rem the page margin and the cell padding narrow, so the Xóa buttons fit from 360 px. The only media query.
+  + '.scroll{overflow-x:auto;position:relative}td form{display:block;margin:0}'
+  + '.sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}'
+  + '@media (max-width:30rem){body{margin:1rem}th,td{padding:.25rem .5rem}}';
 
 // The cart page as a whole HTML document: one row per item, then the subtotal, the shipping fee and the total, less
 // the discount of the coupon in force. items: the lines that stay, already taken from the server cart. removed: the ids
@@ -105,12 +111,12 @@ function cartTable(items: CartItem[], coupon: CouponState, hidden: readonly stri
   // The shipping fee is reckoned on the subtotal before the discount, so shipping() does not change.
   const fee = shipping(items);
   const off = coupon.applied === null ? 0 : discount(coupon.applied, subtotal);
-  return `<table>
+  return `<div class="scroll"><table>
 <thead><tr><th scope="col">Sản phẩm</th><th scope="col">Đơn giá</th><th scope="col">Số lượng</th><th scope="col">Thành tiền</th><th scope="col"><span class="sr-only">Thao tác</span></th></tr></thead>
 <tbody>
 ${rows}
 </tbody>
-</table>
+</table></div>
 ${couponForm(coupon, hidden)}
 <dl>
 <dt>Tạm tính</dt><dd data-testid="subtotal">${formatMoney(subtotal)}</dd>${coupon.applied === null ? '' : discountLine(coupon.applied, off)}

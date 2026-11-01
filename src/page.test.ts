@@ -190,11 +190,40 @@ test('an accepted code leaves the field empty and without the error attributes',
   assert.doesNotMatch(main(html), /autofocus|aria-invalid|coupon-error/);
 });
 
+// The style has one media query, for the table under 30 rem (design of DEMO-20), and it leaves the coupon form alone
+// (SPEC of DEMO-20, Tests that change).
 test('the style wraps the button under the field when the row is too narrow, without a media query', () => {
   const style = renderCart(items).match(/<style>([^<]*)<\/style>/)?.[1] ?? '';
   assert.match(style, /form\{[^}]*display:flex[^}]*flex-wrap:wrap/);
   assert.match(style, /#coupon-code\{[^}]*flex:1 1 /);
-  assert.doesNotMatch(style, /@media/);
+  assert.equal(style.match(/@media/g)?.length, 1);
+  const query = style.match(/@media[^{]*\{((?:[^{}]*\{[^}]*\})*)\}/)?.[1];
+  assert.ok(query !== undefined, 'the block of the media query is read');
+  assert.doesNotMatch(query, /form|#coupon-code/);
+});
+
+test('the table is in a frame that scrolls sideways, so the page itself never does', () => {
+  const html = renderCart(items);
+  assert.match(html, /<div class="scroll"><table>\n[^]*<\/table><\/div>/);
+  const style = html.match(/<style>([^<]*)<\/style>/)?.[1] ?? '';
+  // position:relative keeps the hidden header of the fifth column inside the frame.
+  assert.ok(style.includes('.scroll{overflow-x:auto;position:relative}'), style);
+});
+
+test('the style keeps the forms of the Xóa buttons out of the rule of the coupon form, and narrows the page under 30 rem', () => {
+  const style = renderCart(items).match(/<style>([^<]*)<\/style>/)?.[1] ?? '';
+  assert.ok(style.includes('td form{display:block;margin:0}'), style);
+  assert.ok(style.includes('@media (max-width:30rem){body{margin:1rem}th,td{padding:.25rem .5rem}}'), style);
+  assert.ok(style.indexOf('form{display:flex') < style.indexOf('td form{'), 'the rule of the Xóa forms comes after the rule it overrides');
+});
+
+test('the header of the fifth column is hidden from sight only, not from screen readers', () => {
+  const style = renderCart(items).match(/<style>([^<]*)<\/style>/)?.[1] ?? '';
+  const rule = style.match(/\.sr-only\{([^}]*)\}/)?.[1] ?? '';
+  assert.match(rule, /position:absolute/);
+  assert.match(rule, /width:1px;height:1px/);
+  assert.match(rule, /overflow:hidden/);
+  assert.doesNotMatch(rule, /display:none|visibility:hidden/);
 });
 
 test('the style colours message [5] and gives a refused field a thicker border, so the error is not shown by colour alone', () => {
