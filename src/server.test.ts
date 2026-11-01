@@ -11,9 +11,10 @@ const POLICY = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; 
 // instead of hanging it (review of PR #9).
 const TIMEOUT = 5000;
 
-// Starts the server on a free port of 127.0.0.1 and stops it after the test, dropping the connections still open.
-async function start(t: TestContext) {
-  const server = cartServer();
+// Starts the server of items, or of the sample cart, on a free port of 127.0.0.1 and stops it after the test, dropping
+// the connections still open.
+async function start(t: TestContext, items?: CartItem[]) {
+  const server = cartServer(items);
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => {
     server.closeAllConnections();
@@ -382,4 +383,252 @@ test('POST / with a code that is refused answers the page with its message, the 
   assert.equal(shown(markup, 'coupon-error'), 'Mã giảm giá không hợp lệ.');
   assert.match(markup, /value="&#34;&#62;&#60;b&#62;x&#60;\/b&#62;"/);
   assert.doesNotMatch(markup, /<b>/);
+});
+
+// The markup of a page, without its head: the style names the selectors of the coupon form whether or not it is there.
+const main = (html: string): string => html.slice(html.indexOf('<main>'));
+
+// The first four cells of each line of a page, as shown: name, unit price, quantity and line total.
+const linesOf = (html: string): string[][] =>
+  [...html.matchAll(/<tr data-testid="cart-line"><td>([^<]*)<\/td><td>([^<]*)<\/td><td>([^<]*)<\/td><td>([^<]*)<\/td>/g)].map((cells) => cells.slice(1));
+
+const BUT_BI = ['Bút bi', '5.000 ₫', '3', '15.000 ₫'];
+const SO_TAY = ['Sổ tay', '12.000 ₫', '2', '24.000 ₫'];
+
+test('POST / with remove=but-bi answers the page of Sổ tay alone, with its totals and no message (DEMO-20 AC1)', async (t) => {
+  const url = await start(t);
+  const response = await post(url, 'remove=but-bi');
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.deepEqual(linesOf(html), [SO_TAY]);
+  assert.equal(shown(html, 'subtotal'), '24.000 ₫');
+  assert.equal(shown(html, 'shipping'), '3.000 ₫');
+  assert.equal(shown(html, 'total'), '27.000 ₫');
+  assert.equal(shown(html, 'discount'), undefined);
+  assert.equal(shown(html, 'coupon-error'), undefined);
+});
+
+test('POST / with remove=so-tay answers the page of Bút bi alone, with its totals (DEMO-20 AC2)', async (t) => {
+  const url = await start(t);
+  const html = await (await post(url, 'remove=so-tay')).text();
+  assert.deepEqual(linesOf(html), [BUT_BI]);
+  assert.equal(shown(html, 'subtotal'), '15.000 ₫');
+  assert.equal(shown(html, 'shipping'), '3.000 ₫');
+  assert.equal(shown(html, 'total'), '18.000 ₫');
+});
+
+test('POST / that removes the last line answers the empty cart, without a table, a coupon form or totals (DEMO-20 AC3)', async (t) => {
+  const url = await start(t);
+  for (const body of ['removed=but-bi&remove=so-tay', 'applied=GIAM10&removed=but-bi&remove=so-tay']) {
+    const html = await (await post(url, body)).text();
+    assert.equal(shown(html, 'empty-cart'), 'Giỏ hàng trống.', body);
+    assert.doesNotMatch(main(html), /<table|<form|coupon-code|data-testid="(subtotal|shipping|discount|total)"/, body);
+  }
+});
+
+test('POST / that removes a line under the free shipping threshold charges the shipping fee again (DEMO-20 AC4)', async (t) => {
+  const url = await start(t, [
+    { id: 'ban-phim', name: 'Bàn phím', price: 40000, quantity: 1 },
+    { id: 'chuot', name: 'Chuột', price: 15000, quantity: 1 },
+  ]);
+  const before = await (await send(`${url}/`)).text();
+  assert.equal(shown(before, 'subtotal'), '55.000 ₫');
+  assert.equal(shown(before, 'shipping'), 'Miễn phí');
+  assert.equal(shown(before, 'total'), '55.000 ₫');
+  const html = await (await post(url, 'remove=chuot')).text();
+  assert.deepEqual(linesOf(html), [['Bàn phím', '40.000 ₫', '1', '40.000 ₫']]);
+  assert.equal(shown(html, 'subtotal'), '40.000 ₫');
+  assert.equal(shown(html, 'shipping'), '3.000 ₫');
+  assert.equal(shown(html, 'total'), '43.000 ₫');
+});
+
+test('POST / that removes a line keeps GIAM10 in force and takes it off the subtotal of the lines that stay (DEMO-20 AC5)', async (t) => {
+  const url = await start(t);
+  const html = await (await post(url, 'applied=GIAM10&remove=but-bi')).text();
+  assert.deepEqual(linesOf(html), [SO_TAY]);
+  assert.match(html, /<dt>Giảm giá \(GIAM10\)<\/dt>/);
+  assert.equal(shown(html, 'discount'), '-2.400 ₫');
+  assert.equal(shown(html, 'subtotal'), '24.000 ₫');
+  assert.equal(shown(html, 'shipping'), '3.000 ₫');
+  assert.equal(shown(html, 'total'), '24.600 ₫');
+  assert.match(html, /<input type="hidden" name="applied" value="GIAM10">/);
+  assert.equal(shown(html, 'coupon-error'), undefined);
+});
+
+test('POST / that removes a line keeps GIAM20K in force, never more than the subtotal of the lines that stay (DEMO-20 AC6)', async (t) => {
+  const url = await start(t);
+  const html = await (await post(url, 'applied=GIAM20K&remove=so-tay')).text();
+  assert.deepEqual(linesOf(html), [BUT_BI]);
+  assert.match(html, /<dt>Giảm giá \(GIAM20K\)<\/dt>/);
+  assert.equal(shown(html, 'discount'), '-15.000 ₫');
+  assert.equal(shown(html, 'subtotal'), '15.000 ₫');
+  assert.equal(shown(html, 'shipping'), '3.000 ₫');
+  assert.equal(shown(html, 'total'), '3.000 ₫');
+});
+
+test('POST / with a code of the list and a line removed before applies the code to the lines that stay (DEMO-20 AC7)', async (t) => {
+  const url = await start(t);
+  const html = await (await post(url, 'code=GIAM10&removed=but-bi')).text();
+  assert.deepEqual(linesOf(html), [SO_TAY]);
+  assert.equal(shown(html, 'discount'), '-2.400 ₫');
+  assert.equal(shown(html, 'total'), '24.600 ₫');
+  assert.equal(shown(html, 'coupon-error'), undefined);
+});
+
+test('POST / with a code that is refused and a line removed before shows the message on the lines that stay (DEMO-20 AC8)', async (t) => {
+  const url = await start(t);
+  const html = await (await post(url, 'code=SAIMA&removed=but-bi')).text();
+  assert.deepEqual(linesOf(html), [SO_TAY]);
+  assert.equal(shown(html, 'coupon-error'), 'Mã giảm giá không hợp lệ.');
+  assert.equal(shown(html, 'discount'), undefined);
+  assert.equal(shown(html, 'total'), '27.000 ₫');
+});
+
+test('POST / with a code and no remove field keeps both lines and applies the code (DEMO-20 AC9)', async (t) => {
+  const url = await start(t);
+  const html = await (await post(url, 'code=GIAM10')).text();
+  assert.deepEqual(linesOf(html), [BUT_BI, SO_TAY]);
+  assert.equal(shown(html, 'discount'), '-3.900 ₫');
+  assert.equal(shown(html, 'total'), '38.100 ₫');
+});
+
+test('a remove request reads no code: no message, and the coupon in force stays even beside a code of the list', async (t) => {
+  const url = await start(t);
+  for (const body of ['remove=but-bi&code=SAIMA', 'remove=but-bi&code=GIAM10', 'remove=but-bi&code=', 'code=GIAM20K&remove=but-bi']) {
+    const html = await (await post(url, body)).text();
+    assert.deepEqual(linesOf(html), [SO_TAY], body);
+    assert.equal(shown(html, 'coupon-error'), undefined, body);
+    assert.equal(shown(html, 'discount'), undefined, body);
+    assert.equal(shown(html, 'total'), '27.000 ₫', body);
+    assert.match(html, /name="code" maxlength="64" value="">/, `${body}: the field is empty`);
+  }
+  const kept = await (await post(url, 'applied=GIAM10&remove=but-bi&code=GIAM20K')).text();
+  assert.equal(shown(kept, 'discount'), '-2.400 ₫', 'GIAM10 stays, GIAM20K is not read');
+  assert.equal(shown(kept, 'total'), '24.600 ₫');
+});
+
+test('a remove request checks the coupon in force against the list again, so one that is not in it counts as none', async (t) => {
+  const url = await start(t);
+  const html = await (await post(url, 'applied=GIAM99&remove=but-bi')).text();
+  assert.equal(shown(html, 'discount'), undefined);
+  assert.equal(shown(html, 'total'), '27.000 ₫');
+  assert.doesNotMatch(html, /GIAM99/);
+});
+
+test('POST / reads no name, price, quantity or amount from the form, so an unknown line id gives the sample cart as it is (DEMO-20 AC11)', async (t) => {
+  const url = await start(t);
+  for (const body of ['remove=khong-co&name=X&price=1&quantity=99&total=1', 'remove=khong-co&name=X&price=1&quantity=99&total=1&subtotal=1&shipping=0&discount=99999&id=but-bi']) {
+    const response = await post(url, body);
+    assert.equal(response.status, 200, body);
+    const html = await response.text();
+    assert.deepEqual(linesOf(html), [BUT_BI, SO_TAY], body);
+    assert.equal(shown(html, 'subtotal'), '39.000 ₫', body);
+    assert.equal(shown(html, 'total'), '42.000 ₫', body);
+    assert.equal(shown(html, 'coupon-error'), undefined, body);
+  }
+});
+
+test('a remove request with an unknown, empty or second line id keeps the sample cart, without a message or an error', async (t) => {
+  const url = await start(t);
+  const bodies = [
+    'remove=',
+    'remove=khong-co&remove=but-bi', // only the first value of remove is read
+    'remove=constructor',
+    'remove=__proto__',
+    'remove=__proto__&removed=toString&removed=hasOwnProperty',
+    'remove=hasOwnProperty&removed=constructor&removed=valueOf',
+    'remove=BUT-BI',
+    'remove=but-bi+', // "but-bi " is not trimmed
+    'remove=%FF', // not UTF-8, so U+FFFD
+    `remove=${'a'.repeat(33)}`,
+  ];
+  for (const body of bodies) {
+    const response = await post(url, body);
+    assert.equal(response.status, 200, body);
+    const html = await response.text();
+    assert.deepEqual(linesOf(html), [BUT_BI, SO_TAY], body);
+    assert.equal(shown(html, 'total'), '42.000 ₫', body);
+    assert.equal(shown(html, 'coupon-error'), undefined, body);
+  }
+});
+
+test('the coupon form with unknown lines removed before keeps the sample cart, and asks for a code as without them', async (t) => {
+  const url = await start(t);
+  for (const body of ['code=&removed=toString&removed=hasOwnProperty', 'code=&removed=constructor&removed=__proto__', 'code=&removed=BUT-BI&removed=%FF']) {
+    const html = await (await post(url, body)).text();
+    assert.deepEqual(linesOf(html), [BUT_BI, SO_TAY], body);
+    assert.equal(shown(html, 'total'), '42.000 ₫', body);
+    assert.equal(shown(html, 'coupon-error'), 'Vui lòng nhập mã giảm giá.', body);
+  }
+});
+
+test('lines removed before that repeat or are empty are each taken out once', async (t) => {
+  const url = await start(t);
+  const html = await (await post(url, 'removed=but-bi&removed=but-bi&removed=&remove=so-tay')).text();
+  assert.equal(shown(html, 'empty-cart'), 'Giỏ hàng trống.');
+  const once = await (await post(url, 'removed=but-bi&removed=but-bi&removed=&code=')).text();
+  assert.deepEqual(linesOf(once), [SO_TAY]);
+  assert.equal(shown(once, 'total'), '27.000 ₫');
+});
+
+test('a line id sent in the form never reaches the page, whether it is a line of the cart or not', async (t) => {
+  const url = await start(t);
+  const html = await (await post(url, 'removed=%3Cscript%3E&removed=khong-co&remove=so-tay')).text();
+  assert.deepEqual(linesOf(html), [BUT_BI]);
+  assert.doesNotMatch(html, /script|khong-co/i);
+});
+
+test('the same form sent again gives the same page, so a reload after a remove takes out no other line', async (t) => {
+  const url = await start(t);
+  for (const body of ['applied=GIAM10&remove=but-bi', 'removed=but-bi&code=GIAM20K', 'removed=but-bi&remove=so-tay']) {
+    const first = await (await post(url, body)).text();
+    const again = await (await post(url, body)).text();
+    assert.equal(again, first, body);
+  }
+  assert.deepEqual(linesOf(await (await send(`${url}/`)).text()), [BUT_BI, SO_TAY], 'GET / still has the sample cart');
+});
+
+test('the page of a remove request has the headers of GET /', async (t) => {
+  const url = await start(t);
+  const got = await send(`${url}/`);
+  const removed = await post(url, 'remove=but-bi');
+  for (const name of ['content-type', 'content-security-policy', 'x-content-type-options']) {
+    assert.equal(removed.headers.get(name), got.headers.get(name), name);
+  }
+  assert.equal(removed.headers.get('set-cookie'), null);
+});
+
+test('the largest body the coupon form of the page sends, 612 bytes, is read', async (t) => {
+  const url = await start(t);
+  const body = `code=${'%E1%BA%A1'.repeat(64)}&removed=but-bi&applied=GIAM20K`;
+  assert.equal(Buffer.byteLength(body), 612);
+  const response = await post(url, body);
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.deepEqual(linesOf(html), [SO_TAY]);
+  assert.equal(shown(html, 'coupon-error'), 'Mã giảm giá không hợp lệ.');
+  assert.equal(shown(html, 'discount'), '-20.000 ₫');
+  assert.equal(shown(html, 'total'), '7.000 ₫');
+});
+
+test('a remove request from another origin, or without one, is 403 Forbidden and not the page (DEMO-20 AC10)', async (t) => {
+  const url = await start(t);
+  const host = new URL(url).host;
+  for (const origin of [['Origin', 'http://evil.example'], [], ['Origin', 'null']]) {
+    const reply = await raw(url, { method: 'POST', headers: ['Host', host, ...origin], body: 'remove=but-bi' });
+    assert.equal(reply.status, 403, origin.join(' ') || 'no Origin');
+    assert.equal(reply.headers['content-type'], 'text/plain; charset=utf-8');
+    assert.equal(reply.body, 'Forbidden');
+  }
+});
+
+test('a remove request from another origin is 403 before its body is read, even over 1.024 bytes (DEMO-20 AC10)', async (t) => {
+  const url = await start(t);
+  const host = new URL(url).host;
+  const body = 'removed=so-tay&remove=but-bi&pad='.padEnd(5000, 'A');
+  for (const length of [['Content-Length', String(body.length)], []]) {
+    const reply = await raw(url, { method: 'POST', headers: ['Host', host, 'Origin', 'http://evil.example', ...length], body });
+    assert.equal(reply.status, 403, length.length === 0 ? 'chunked' : 'with Content-Length');
+    assert.equal(reply.body, 'Forbidden');
+  }
 });

@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { checkLineIds } from './cart.ts';
-import { applyCoupon } from './coupon.ts';
+import { checkLineIds, removeLines } from './cart.ts';
+import { applyCoupon, keepCoupon } from './coupon.ts';
 import { renderCart, type CartItem } from './page.ts';
 
 // The cart the page shows until the cart has a store: two lines, a subtotal of 39.000 ₫, so shipping is charged.
@@ -27,7 +27,8 @@ function ownHost(request: IncomingMessage, port: number): string | undefined {
   return count === 1 && (host === `127.0.0.1:${port}` || host === `localhost:${port}`) ? host : undefined;
 }
 
-// The cart page at /: GET and HEAD answer the page made once, POST / the page with the coupon of its form. The
+// The cart page at /: GET and HEAD answer the page made once, POST / the page of the lines that stay once the lines
+// of its form are removed, with the coupon of its form. The
 // checks run in the order of the plan: a Host that does not name this server is 400, before anything else (AC11);
 // another path is 404; another method 405; a POST without the Origin of this server 403, before its body is read
 // (AC9); a body over BODY_LIMIT bytes 413 (AC10). The path is the request target up to its query string, read as is:
@@ -56,10 +57,17 @@ export function cartServer(items: CartItem[] = SAMPLE_CART): Server {
       readBody(
         request,
         (body) => {
-          // Any Content-Type is read as a form; bytes that are not UTF-8 become U+FFFD, an unknown code (plan, POST /).
+          // Any Content-Type is read as a form; bytes that are not UTF-8 become U+FFFD, an unknown code or line id
+          // (plan, POST /). Only remove, removed, code and applied are read: every name, price, quantity and amount
+          // comes from the server cart (AC11 of DEMO-20).
           const form = new URLSearchParams(body);
-          const coupon = applyCoupon({ code: form.get('code') ?? '', applied: form.get('applied') ?? '' });
-          response.writeHead(200, PAGE_HEADERS).end(renderCart(items, coupon));
+          const remove = form.get('remove'); // a remove request whenever the field is there, even empty
+          const sent = form.getAll('removed');
+          const { kept } = removeLines(items, remove === null ? sent : [...sent, remove]);
+          const applied = form.get('applied') ?? '';
+          // A remove request reads no code, so it never shows a message about one.
+          const coupon = remove === null ? applyCoupon({ code: form.get('code') ?? '', applied }) : keepCoupon(applied);
+          response.writeHead(200, PAGE_HEADERS).end(renderCart(kept, coupon));
         },
         // Connection: close lets Node drop the rest of the body instead of reading it to keep the connection (AC10).
         () => response.writeHead(413, { ...TEXT_HEADERS, Connection: 'close' }).end('Payload too large'),
