@@ -25,3 +25,19 @@ export function shipping(lines: Line[]): number {
   const sum = total(lines);
   return sum > 0 && sum < FREE_SHIPPING_FROM ? SHIPPING_FEE : 0;
 }
+
+// The id of a line: 1 to 32 of a–z, 0–9 and -, so a form sends it as it is, with no percent-encoding.
+const LINE_ID = /^[a-z0-9-]{1,32}$/;
+
+// Throws a RangeError when a line has an id that is not LINE_ID, or the id of an earlier line. typeof comes first:
+// LINE_ID.test(undefined) tests the string "undefined", which passes.
+export function checkLineIds(lines: readonly { id: string }[]): void {
+  const seen = new Set<string>();
+  for (const { id } of lines) {
+    if (typeof id !== 'string' || !LINE_ID.test(id)) {
+      throw new RangeError(`a line id must be 1 to 32 of a-z, 0-9 and -, got ${JSON.stringify(id)}`);
+    }
+    if (seen.has(id)) throw new RangeError(`a line id must be used once, got ${id} twice`);
+    seen.add(id);
+  }
+}
