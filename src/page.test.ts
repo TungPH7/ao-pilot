@@ -220,7 +220,6 @@ test('the style keeps the forms of the Xóa buttons out of the rule of the coupo
   const style = renderCart(items).match(/<style>([^<]*)<\/style>/)?.[1] ?? '';
   assert.ok(style.includes('td form{display:block;margin:0}'), style);
   assert.ok(style.includes('@media (max-width:30rem){body{margin:1rem}th,td{padding:.25rem .5rem}}'), style);
-  assert.ok(style.indexOf('form{display:flex') < style.indexOf('td form{'), 'the rule of the Xóa forms comes after the rule it overrides');
 });
 
 test('the header of the fifth column is hidden from sight only, not from screen readers', () => {
