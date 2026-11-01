@@ -73,6 +73,15 @@ function couponForm(coupon: CouponState): string {
 </form>`;
 }
 
+// The form of the Xóa button of a line: a POST / form of its own, never the coupon form, since Enter in the coupon field
+// sends its form through the first submit button of that form. It sends the id of the line and the coupon in force,
+// never the coupon field, a name, a price or an amount. The label names the product, so a screen reader tells the
+// buttons apart, and starts with the word shown.
+function removeForm(item: CartItem, coupon: CouponState): string {
+  const hidden = coupon.applied === null ? '' : `<input type="hidden" name="applied" value="${escapeHtml(coupon.applied.code)}">`;
+  return `<form method="post" action="/">${hidden}<button type="submit" name="remove" value="${escapeHtml(item.id)}" aria-label="Xóa ${escapeHtml(item.name)}">Xóa</button></form>`;
+}
+
 // Line [7] of the coupon in force, as a minus amount. A discount of nothing is "0 ₫", since formatMoney(-0) is "-0 ₫".
 function discountLine(coupon: Coupon, off: number): string {
   return `\n<dt>Giảm giá (${escapeHtml(coupon.code)})</dt><dd data-testid="discount">${formatMoney(off === 0 ? 0 : -off)}</dd>`;
@@ -80,14 +89,14 @@ function discountLine(coupon: Coupon, off: number): string {
 
 function cartTable(items: CartItem[], coupon: CouponState): string {
   const rows = items
-    .map((item) => `<tr data-testid="cart-line"><td>${escapeHtml(item.name)}</td><td>${formatMoney(item.price)}</td><td>${item.quantity}</td><td>${formatMoney(item.price * item.quantity)}</td></tr>`)
+    .map((item) => `<tr data-testid="cart-line"><td>${escapeHtml(item.name)}</td><td>${formatMoney(item.price)}</td><td>${item.quantity}</td><td>${formatMoney(item.price * item.quantity)}</td><td>${removeForm(item, coupon)}</td></tr>`)
     .join('\n');
   const subtotal = total(items);
   // The shipping fee is reckoned on the subtotal before the discount, so shipping() does not change.
   const fee = shipping(items);
   const off = coupon.applied === null ? 0 : discount(coupon.applied, subtotal);
   return `<table>
-<thead><tr><th scope="col">Sản phẩm</th><th scope="col">Đơn giá</th><th scope="col">Số lượng</th><th scope="col">Thành tiền</th></tr></thead>
+<thead><tr><th scope="col">Sản phẩm</th><th scope="col">Đơn giá</th><th scope="col">Số lượng</th><th scope="col">Thành tiền</th><th scope="col"><span class="sr-only">Thao tác</span></th></tr></thead>
 <tbody>
 ${rows}
 </tbody>

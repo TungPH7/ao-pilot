@@ -16,10 +16,12 @@ test('money is shown in đồng, the Vietnamese way', () => {
   assert.equal(formatMoney(0), '0\u00a0₫');
 });
 
+// The four cells of DEMO-10 come first, then a fifth cell that holds the form of the Xóa button (SPEC of DEMO-20, Tests
+// that change).
 test('each line shows its name, unit price, quantity and line total', () => {
   const html = renderCart(items);
-  assert.match(html, /<tr data-testid="cart-line"><td>Bút bi<\/td><td>5\.000\u00a0₫<\/td><td>3<\/td><td>15\.000\u00a0₫<\/td><\/tr>/);
-  assert.match(html, /<tr data-testid="cart-line"><td>Sổ tay<\/td><td>12\.000\u00a0₫<\/td><td>2<\/td><td>24\.000\u00a0₫<\/td><\/tr>/);
+  assert.match(html, /<tr data-testid="cart-line"><td>Bút bi<\/td><td>5\.000\u00a0₫<\/td><td>3<\/td><td>15\.000\u00a0₫<\/td><td><form [^]*?<\/form><\/td><\/tr>/);
+  assert.match(html, /<tr data-testid="cart-line"><td>Sổ tay<\/td><td>12\.000\u00a0₫<\/td><td>2<\/td><td>24\.000\u00a0₫<\/td><td><form [^]*?<\/form><\/td><\/tr>/);
 });
 
 test('the page shows the subtotal, the shipping fee and the total', () => {
@@ -87,8 +89,10 @@ test('a cart has a coupon form posting to /, with the labelled field [3] and the
   assert.match(html, /<label for="coupon-code">Mã giảm giá<\/label>/);
   assert.match(html, /<input type="text" id="coupon-code" name="code" maxlength="64" value="">/);
   assert.match(html, /<button type="submit">Áp dụng<\/button>/);
-  assert.ok(html.indexOf('</table>') < html.indexOf('<form'), 'the form comes after the table');
-  assert.ok(html.indexOf('</form>') < html.indexOf('<dl>'), 'the form comes before the totals');
+  // The forms of the Xóa buttons are in the table, so the coupon form is found by its label (SPEC of DEMO-20).
+  const label = html.indexOf('<label for="coupon-code">');
+  assert.ok(html.indexOf('</table>') < label, 'the form comes after the table');
+  assert.ok(html.indexOf('</form>', label) < html.indexOf('<dl>'), 'the form comes before the totals');
 });
 
 test('the coupon field is not required, so the server checks it and every browser shows the same message', () => {
@@ -131,10 +135,12 @@ test('a discount of nothing is shown as 0 ₫, without a minus sign', () => {
   assert.match(html, /<dt>Giảm giá \(GIAM10\)<\/dt><dd data-testid="discount">0\u00a0₫<\/dd>/);
 });
 
+// Every form of the page, the coupon form and the form of each Xóa button, sends the coupon in force once (SPEC of
+// DEMO-20, Tests that change).
 test('a coupon in force goes back with the form in the hidden field applied', () => {
   const html = renderCart(items, applyCoupon({ code: 'GIAM10', applied: '' }));
   assert.match(html, /<form method="post" action="\/">[^]*<input type="hidden" name="applied" value="GIAM10">[^]*<\/form>/);
-  assert.equal(html.match(/name="applied"/g)?.length, 1);
+  assert.equal(html.match(/name="applied"/g)?.length, html.match(/<form/g)?.length);
 });
 
 test('the code of a coupon is escaped in the discount line and in the hidden field', () => {
@@ -197,4 +203,58 @@ test('the style colours message [5] and gives a refused field a thicker border, 
   assert.match(style, /#coupon-code\{[^}]*border:1px solid/);
   assert.match(style, /#coupon-code\[aria-invalid="true"\]\{[^}]*border:2px solid/);
   assert.doesNotMatch(style, /outline:(none|0)/, 'the focus ring of the browser stays');
+});
+
+// The row of a line, from its <tr> to its </tr>, found by the name of its product.
+const rowOf = (html: string, name: string): string =>
+  html.match(new RegExp(`<tr data-testid="cart-line"><td>${name}</td>.*?</tr>`))?.[0] ?? '';
+
+// The coupon form, from its <form to its </form>.
+const couponFormOf = (html: string): string => html.match(/<form method="post" action="\/">\n<label for="coupon-code">[^]*?<\/form>/)?.[0] ?? '';
+
+test('each line has one Xóa button named after its product, the submit button of a POST / form of its own', () => {
+  const html = renderCart(items);
+  assert.match(
+    rowOf(html, 'Bút bi'),
+    /<td><form method="post" action="\/"><button type="submit" name="remove" value="but-bi" aria-label="Xóa Bút bi">Xóa<\/button><\/form><\/td><\/tr>$/,
+  );
+  assert.match(
+    rowOf(html, 'Sổ tay'),
+    /<td><form method="post" action="\/"><button type="submit" name="remove" value="so-tay" aria-label="Xóa Sổ tay">Xóa<\/button><\/form><\/td><\/tr>$/,
+  );
+  assert.equal(html.match(/name="remove"/g)?.length, 2);
+  assert.equal(html.match(/<form method="post" action="\/">/g)?.length, 3, 'a form for each line, and the coupon form');
+});
+
+test('the fifth column has a header that only screen readers read: Thao tác', () => {
+  const html = renderCart(items);
+  assert.match(html, /<th scope="col">Thành tiền<\/th><th scope="col"><span class="sr-only">Thao tác<\/span><\/th><\/tr><\/thead>/);
+});
+
+test('a line id and a product name are escaped in the value and the label of the Xóa button', () => {
+  const html = renderCart([{ id: '"><b>id</b>', name: '<b>"Bút" & \'bi\'</b>', price: 1000, quantity: 1 }]);
+  assert.match(html, /name="remove" value="&#34;&#62;&#60;b&#62;id&#60;\/b&#62;"/);
+  assert.match(html, /aria-label="Xóa &#60;b&#62;&#34;Bút&#34; &#38; &#39;bi&#39;&#60;\/b&#62;">Xóa<\/button>/);
+  assert.doesNotMatch(html, /<b>/);
+});
+
+test('a coupon in force goes with the form of each Xóa button, before the button', () => {
+  const html = renderCart(items, applyCoupon({ code: 'GIAM10', applied: '' }));
+  for (const [name, id] of [['Bút bi', 'but-bi'], ['Sổ tay', 'so-tay']]) {
+    assert.match(
+      rowOf(html, name),
+      new RegExp(`<form method="post" action="/"><input type="hidden" name="applied" value="GIAM10"><button type="submit" name="remove" value="${id}"`),
+      name,
+    );
+  }
+});
+
+// Enter in the coupon field sends its form through the first submit button of that form, so a Xóa button there would
+// remove a line (SPEC of DEMO-20, Never).
+test('the coupon form has no Xóa button, and no button is tied to a form by the attribute form', () => {
+  const html = renderCart(items, applyCoupon({ code: 'SAIMA', applied: 'GIAM10' }));
+  const form = couponFormOf(html);
+  assert.match(form, /<button type="submit">Áp dụng<\/button>/);
+  assert.doesNotMatch(form, /name="remove"|Xóa/);
+  assert.doesNotMatch(html, /\sform=/);
 });
