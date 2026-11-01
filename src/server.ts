@@ -28,13 +28,13 @@ function ownHost(request: IncomingMessage, port: number): string | undefined {
 }
 
 // The cart page at /: GET and HEAD answer the page made once, POST / the page of the lines that stay once the lines
-// of its form are removed, with the coupon of its form. The
-// checks run in the order of the plan: a Host that does not name this server is 400, before anything else (AC11);
-// another path is 404; another method 405; a POST without the Origin of this server 403, before its body is read
-// (AC9); a body over BODY_LIMIT bytes 413 (AC10). The path is the request target up to its query string, read as is:
-// `//` or `//host/` is not /. A cart the page cannot show (total() throws a RangeError) fails here and not on a
-// request, and discount() does not throw on a subtotal that total() returned. So does a cart whose lines do not each
-// have an id of their own (checkLineIds() throws a RangeError).
+// of its form are removed, with the coupon of its form. The checks run in the order of the plan: a Host that does not
+// name this server is 400, before anything else (AC11 of DEMO-11); another path is 404; another method 405; a POST
+// without the Origin of this server 403, before its body is read (AC9 of DEMO-11); a body over BODY_LIMIT bytes 413
+// (AC10 of DEMO-11). The path is the request target up to its query string, read as is: `//` or `//host/` is not /.
+// A cart the page cannot show (total() throws a RangeError) fails here and not on a request, and discount() does not
+// throw on a subtotal that total() returned. A cart whose lines do not each have an id of their own fails here too
+// (checkLineIds() throws a RangeError).
 export function cartServer(items: CartItem[] = SAMPLE_CART): Server {
   checkLineIds(items);
   const page = renderCart(items);
