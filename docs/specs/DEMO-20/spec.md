@@ -102,7 +102,10 @@ Các yêu cầu sau không phải user story. Chỗ nào ghi "đề xuất", `sa
 
 - Giữ cách làm hiện có: HTML dựng ở server bằng `node:http`, không framework, không script phía client, CSP giữ nguyên.
 - Server vẫn không lưu trạng thái. Giỏ còn lại đi theo form, như mã đang áp đi trong trường ẩn `applied` hôm nay:
-  - Mỗi dòng của giỏ server có một mã dòng cố định, không đổi khi dòng khác bị xóa. Đề xuất: thêm trường `id` vào `CartItem`, như `but-bi` và `so-tay`.
+  - Mỗi dòng của giỏ server có một mã dòng cố định, không đổi khi dòng khác bị xóa. Quyết định Q5, ngày 2026-11-01:
+    - `CartItem` có trường `id` bắt buộc, như `but-bi` và `so-tay` của `SAMPLE_CART`. Thêm `id` không đổi dòng, giá hay số lượng của `SAMPLE_CART`.
+    - Mã dòng không phải vị trí của dòng trong giỏ. Nếu thứ tự của giỏ server đổi, mã cũ của một trang đang mở chỉ là mã lạ và bị bỏ qua, không xóa nhầm dòng.
+    - Dữ liệu của các test hiện có thêm `id` (mục Tests that change).
   - Mọi form của trang mang danh sách các dòng đã xóa và mã đang áp. Đề xuất: trường ẩn `removed`, lặp lại một lần cho mỗi dòng đã xóa, và nút "Xóa" gửi `remove=<mã dòng>`.
   - Form chỉ mang mã dòng, không mang tên, đơn giá, số lượng hay số tiền. Server lấy mọi con số từ giỏ của server.
   - Giỏ còn lại là giỏ của server, bỏ các dòng có trong danh sách đã xóa và dòng cần xóa. Mã dòng không có trong giỏ, mã trùng hay rỗng bị bỏ qua, không có thông báo. Trang trả về chỉ ghi lại các mã có trong giỏ.
@@ -116,18 +119,33 @@ Các yêu cầu sau không phải user story. Chỗ nào ghi "đề xuất", `sa
 - `POST /` không có trường nào của Epic này cho đúng trang như hôm nay. Các AC của DEMO-11 và các test hiện có của `src/server.test.ts` cho `POST /` không đổi.
 - `GET /` và `HEAD /` vẫn trả trang dựng một lần với giỏ đủ, nay có nút "Xóa" trên mỗi dòng.
 - Thứ tự kiểm của server không đổi: `Host`, path, method, `Origin`, cỡ body. Yêu cầu xóa đi qua bước kiểm `Origin` như mọi `POST /` (AC10).
-- Body của `POST /` giữ giới hạn 1.024 byte. Với hai dòng của giỏ mẫu, body lớn nhất chỉ vài chục byte.
+- Body của `POST /` giữ giới hạn 1.024 byte. Trên giỏ mẫu, body lớn nhất mà trang gửi là 44 byte cho form của nút "Xóa", và 612 byte cho form mã (mục Non-functional requirements).
 - Mã dòng, khi ghi vào HTML (giá trị của nút, trường ẩn), đi qua `escapeHtml` của `src/page.ts`. Thuộc tính luôn có dấu nháy.
 - Không có dữ liệu mới về người dùng. Mã dòng nằm trong code. Epic không thêm log theo request.
 
 ### Tests that change
 
-Nút "Xóa" nằm trong một ô mới của mỗi dòng. Hai test hiện có kiểm đúng bốn ô của mỗi dòng nên đổi theo. Ý nghĩa của chúng giữ nguyên: bốn ô đầu vẫn là tên, đơn giá, số lượng và thành tiền.
+Các test hiện có sau đổi theo Epic. Ý nghĩa của từng test giữ nguyên; chỉ cách kiểm đổi theo trang mới.
+
+Nút "Xóa" nằm trong một ô mới của mỗi dòng. Hai test kiểm đúng bốn ô của mỗi dòng nên đổi theo. Bốn ô đầu vẫn là tên, đơn giá, số lượng và thành tiền:
 
 - `e2e/cart.spec.ts`, AC1 của DEMO-10.
 - `src/page.test.ts`, test "each line shows its name, unit price, quantity and line total".
 
-Mọi E2E khác của DEMO-10 và DEMO-11 phải pass mà không đổi.
+Ba test nữa của `src/page.test.ts` đổi theo `design.md`. Quyết định Q4, ngày 2026-11-01:
+
+| Test | Vì sao đổi | Ý nghĩa giữ nguyên |
+|---|---|---|
+| "a cart has a coupon form posting to /, with the labelled field [3] and the button [4], between the table and the totals" | Test kiểm `<form` đầu tiên đứng sau `</table>`. Nay form đầu tiên là form của nút "Xóa", trong bảng | Form mã đứng giữa bảng và các con số |
+| "a coupon in force goes back with the form in the hidden field applied" | Test kiểm trang có đúng một `name="applied"`. Nay mỗi form có một, tức ba trên giỏ mẫu | Mã đang áp đi theo mọi form, mỗi form đúng một lần |
+| "the style wraps the button under the field when the row is too narrow, without a media query" | Test kiểm `STYLE` không có `@media`. Design thêm đúng một media query dưới 30 rem | Hàng ô mã và nút "Áp dụng" vẫn xuống dòng mà không cần media query; `STYLE` có đúng một media query, và nó không đụng luật của form mã |
+
+Dữ liệu của các test hiện có thêm `id`, vì `CartItem` có `id` bắt buộc. Quyết định Q5, ngày 2026-11-01. Chỉ đổi dữ liệu, không đổi assertion hay tên test:
+
+- 7 dòng dữ liệu, trong 6 giỏ, của `src/page.test.ts`;
+- 1 dòng của `src/server.test.ts`, trong test "a cart the page cannot show stops the server from being made, not a request". Giỏ của test này vẫn bị từ chối vì giá âm.
+
+Mọi test khác của `src/page.test.ts` và `src/server.test.ts`, và mọi E2E khác của DEMO-10 và DEMO-11, phải pass mà không đổi. Trên prototype của `sa` ở `.ai/sa/demo-20/probe/`, ngày 2026-11-01, 26 test còn lại của `src/page.test.ts` và 26 test của `src/server.test.ts` pass như vậy.
 
 ### Non-functional requirements
 
@@ -139,7 +157,7 @@ Các yêu cầu của DEMO-11 giữ nguyên: giới hạn header, thời hạn r
 
 - Mỗi request vẫn xử lý hoàn toàn trong bộ nhớ: không đọc file, không gọi mạng, không cơ sở dữ liệu. Chọn các dòng còn lại là lọc giỏ của server theo mã dòng gửi lên.
 - `GET /` và `HEAD /` vẫn trả trang dựng một lần khi tạo server. `POST /` dựng trang ở mỗi request, như hôm nay.
-- Giới hạn body 1.024 byte giữ nguyên, và mọi form của trang phải vừa giới hạn đó. Trên giỏ mẫu, với tên trường và mã dòng `ba` đề xuất, body lớn nhất Chrome gửi là:
+- Giới hạn body 1.024 byte giữ nguyên, và mọi form của trang phải vừa giới hạn đó. Trên giỏ mẫu, với mã dòng `but-bi`, `so-tay` (quyết định Q5) và tên trường `ba` đề xuất, body lớn nhất Chrome gửi là:
   - form của nút "Xóa": 44 byte, `removed=but-bi&applied=GIAM20K&remove=so-tay`;
   - form mã: 612 byte, khi ô mã có đủ 64 ký tự 3 byte UTF-8 như "ạ" (mỗi ký tự thành 9 byte `%E1%BA%A1`), cùng một dòng đã xóa và `GIAM20K`.
 - Vì giỏ còn lại đi theo form, giới hạn body chặn số dòng đã xóa mà form mã mang được:
@@ -301,7 +319,7 @@ Mọi Story và Sub-task viết theo TDD: test đỏ trước, code sau.
   - Thêm cookie, session hay bất kỳ cách lưu trạng thái nào.
   - Đổi quy tắc phí vận chuyển, danh sách mã hay mức giảm.
   - Đổi câu chữ trên trang đã chốt ở mục Business rules, hoặc thêm câu chữ mới.
-  - Đổi một test hiện có ngoài hai test của mục Tests that change.
+  - Đổi một test hiện có ngoài các test và dữ liệu của mục Tests that change.
 - **Never:**
   - Thêm JavaScript phía client.
   - Đặt nút "Xóa" trong form mã giảm giá, hay gắn nút vào form đó bằng thuộc tính `form`.
@@ -322,44 +340,7 @@ Các điều kiện sau cộng thêm vào Epic DoD của `.ai-orchestrator/docs/
 
 ## Open Questions
 
-Các câu Q1–Q3 của `ba` được trả lời ngày 2026-11-01: bạn chọn đề xuất của `ba` ở cả ba câu. Các câu trả lời đã thành quyết định trong các mục Scope, Business rules, User stories và Testing Strategy.
+Không còn câu hỏi mở.
 
-Câu Q4 và Q5 dưới đây là của `sa`, ngày 2026-11-01. Cả hai đụng tới mục Ask first "Đổi một test hiện có ngoài hai test của mục Tests that change", nên cần bạn trả lời trước gate ①.
-
-**Q4. Ba test hiện có nữa của `src/page.test.ts` phải đổi theo design.**
-
-Tôi dựng một prototype của `renderCart` theo `design.md`:
-
-- mỗi nút "Xóa" có form riêng trong ô thứ năm;
-- mã đang áp và các dòng đã xóa đi trong mọi form;
-- `STYLE` có một media query dưới 30 rem.
-
-Rồi tôi chạy các test hiện có trên Node 24.17.0. 26 test của `src/server.test.ts` pass mà không đổi. Ở `src/page.test.ts`, ngoài test "each line shows…" đã có trong mục Tests that change, ba test sau fail vì chính design, không vì lỗi của prototype:
-
-| Test | Điều nó kiểm, nay sai | Ý nghĩa cần giữ |
-|---|---|---|
-| "a cart has a coupon form posting to /, with the labelled field [3] and the button [4], between the table and the totals" | `<form` đầu tiên đứng sau `</table>`. Nay form đầu tiên là form của nút "Xóa", trong bảng | Form mã đứng giữa bảng và các con số |
-| "a coupon in force goes back with the form in the hidden field applied" | Trang có đúng một `name="applied"`. Nay mỗi form có một, tức ba trên giỏ mẫu | Mã đang áp đi theo mọi form, mỗi form đúng một lần |
-| "the style wraps the button under the field when the row is too narrow, without a media query" | `STYLE` không có `@media`. Design thêm đúng một media query dưới 30 rem | Hàng ô mã và nút "Áp dụng" vẫn xuống dòng mà không cần media query; `STYLE` có đúng một media query, và nó không đụng luật của form mã |
-
-Tôi chỉ đọc các E2E hiện có, chưa chạy chúng trên prototype. Chúng tìm phần tử theo nhãn, theo vai trò với tên đầy đủ, hay theo `data-testid`, nên không đụng tới nút "Xóa", trừ AC1 của DEMO-10 đã có trong mục Tests that change.
-
-Đề xuất: thêm ba test này vào mục Tests that change, giữ ý nghĩa ở cột cuối.
-
-**Q5. Thêm mã dòng vào dữ liệu của các test hiện có.**
-
-Nếu `CartItem` có trường `id` bắt buộc, như `ba` đề xuất ở mục Technical requirements, thì dữ liệu của các test hiện có thiếu `id`:
-
-- 7 dòng dữ liệu, trong 6 giỏ, của `src/page.test.ts`;
-- 1 dòng của `src/server.test.ts`, trong test "a cart the page cannot show stops the server from being made, not a request".
-
-Khi đó `npm run typecheck` fail. Trên prototype, `escapeHtml(undefined)` còn ném `TypeError`, làm 26 trên 30 test của `src/page.test.ts` fail. Có hai cách:
-
-- (A) Thêm `id` vào các dòng dữ liệu đó. Chỉ đổi dữ liệu, không đổi assertion hay tên test. Thêm `id` vào `SAMPLE_CART` không đổi dòng, giá hay số lượng của nó.
-- (B) Không thêm `id`. Mã dòng là vị trí của dòng trong giỏ server (`0`, `1`), và `renderCart` nhận danh sách đã xóa ở một tham số thứ ba có giá trị mặc định. Không test hiện có nào phải đổi dữ liệu.
-
-Đề xuất: (A).
-
-- Lý do chính: nếu thứ tự của giỏ server đổi giữa hai lần tải trang, như khi sửa `SAMPLE_CART` hay sau này khi giỏ được lưu, thì với (B) form của một trang đang mở xóa nhầm dòng mà không ai thấy lỗi. Với (A), mã cũ chỉ là mã lạ và bị bỏ qua.
-- Mã như `but-bi` cũng đọc được trong body và trong README, và khớp ví dụ `khong-co` của AC11.
-- Test "a cart the page cannot show…" giữ ý nghĩa: giỏ của nó vẫn bị từ chối vì giá âm.
+- Các câu Q1–Q3 của `ba` được trả lời ngày 2026-11-01: bạn chọn đề xuất của `ba` ở cả ba câu. Các câu trả lời đã thành quyết định trong các mục Scope, Business rules, User stories và Testing Strategy.
+- Các câu Q4 và Q5 của `sa` được trả lời ngày 2026-11-01 ("theo đề xuất"): bạn chọn đề xuất của `sa` ở cả hai câu. Các câu trả lời đã thành quyết định trong các mục Technical requirements (mã dòng `id`), Tests that change và Boundaries.
