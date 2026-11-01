@@ -207,7 +207,13 @@ test('the table is in a frame that scrolls sideways, so the page itself never do
   assert.match(html, /<div class="scroll"><table>\n[^]*<\/table><\/div>/);
   const style = html.match(/<style>([^<]*)<\/style>/)?.[1] ?? '';
   // position:relative keeps the hidden header of the fifth column inside the frame.
-  assert.ok(style.includes('.scroll{overflow-x:auto;position:relative}'), style);
+  assert.ok(style.includes('.scroll{overflow-x:auto;position:relative;'), style);
+});
+
+test('the frame keeps 3 rem clear at its end, so a Xóa button reached by Tab scrolls fully into sight', () => {
+  const style = renderCart(items).match(/<style>([^<]*)<\/style>/)?.[1] ?? '';
+  // Chrome scrolls the frame only for a button wholly out of it; at 320 px each button still shows 7 of its 47 px.
+  assert.ok(style.includes('.scroll{overflow-x:auto;position:relative;scroll-padding-inline-end:3rem}'), style);
 });
 
 test('the style keeps the forms of the Xóa buttons out of the rule of the coupon form, and narrows the page under 30 rem', () => {
