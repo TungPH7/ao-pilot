@@ -1,12 +1,13 @@
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { checkLineIds } from './cart.ts';
 import { applyCoupon } from './coupon.ts';
 import { renderCart, type CartItem } from './page.ts';
 
 // The cart the page shows until the cart has a store: two lines, a subtotal of 39.000 ₫, so shipping is charged.
 export const SAMPLE_CART: CartItem[] = [
-  { name: 'Bút bi', price: 5000, quantity: 3 },
-  { name: 'Sổ tay', price: 12000, quantity: 2 },
+  { id: 'but-bi', name: 'Bút bi', price: 5000, quantity: 3 },
+  { id: 'so-tay', name: 'Sổ tay', price: 12000, quantity: 2 },
 ];
 
 // The page has no script, so the policy allows none; the style is inline. Forms may post only to this server.
@@ -31,8 +32,10 @@ function ownHost(request: IncomingMessage, port: number): string | undefined {
 // another path is 404; another method 405; a POST without the Origin of this server 403, before its body is read
 // (AC9); a body over BODY_LIMIT bytes 413 (AC10). The path is the request target up to its query string, read as is:
 // `//` or `//host/` is not /. A cart the page cannot show (total() throws a RangeError) fails here and not on a
-// request, and discount() does not throw on a subtotal that total() returned.
+// request, and discount() does not throw on a subtotal that total() returned. So does a cart whose lines do not each
+// have an id of their own (checkLineIds() throws a RangeError).
 export function cartServer(items: CartItem[] = SAMPLE_CART): Server {
+  checkLineIds(items);
   const page = renderCart(items);
   // requireHostHeader: false lets the server answer an HTTP/1.1 request without a Host with its own 400, as text.
   const server = createServer({ requireHostHeader: false }, (request, response) => {

@@ -2,6 +2,7 @@ import { shipping, total, type Line } from './cart.ts';
 import { discount, NO_COUPON, type Coupon, type CouponState } from './coupon.ts';
 
 export interface CartItem extends Line {
+  id: string; // fixed, never the position of the line: the Xóa button and the hidden fields removed carry it
   name: string;
 }
 

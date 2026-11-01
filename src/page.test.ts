@@ -4,8 +4,8 @@ import { applyCoupon, NO_COUPON } from './coupon.ts';
 import { formatMoney, renderCart, type CartItem } from './page.ts';
 
 const items: CartItem[] = [
-  { name: 'Bút bi', price: 5000, quantity: 3 },
-  { name: 'Sổ tay', price: 12000, quantity: 2 },
+  { id: 'but-bi', name: 'Bút bi', price: 5000, quantity: 3 },
+  { id: 'so-tay', name: 'Sổ tay', price: 12000, quantity: 2 },
 ];
 
 // The markup of a page, without its head: the style names the selectors of the coupon form whether or not it is there.
@@ -30,7 +30,7 @@ test('the page shows the subtotal, the shipping fee and the total', () => {
 });
 
 test('free shipping is shown as such', () => {
-  const html = renderCart([{ name: 'Balo', price: 50000, quantity: 1 }]);
+  const html = renderCart([{ id: 'balo', name: 'Balo', price: 50000, quantity: 1 }]);
   assert.match(html, /<dd data-testid="shipping">Miễn phí<\/dd>/);
   assert.match(html, /<dd data-testid="total">50\.000\u00a0₫<\/dd>/);
 });
@@ -42,7 +42,7 @@ test('an empty cart says so, without a table or totals', () => {
 });
 
 test('a product name is escaped, so it cannot add markup to the page', () => {
-  const html = renderCart([{ name: '<script>alert("x")</script> & \'y\'', price: 1000, quantity: 1 }]);
+  const html = renderCart([{ id: 'script', name: '<script>alert("x")</script> & \'y\'', price: 1000, quantity: 1 }]);
   assert.match(html, /<td>&#60;script&#62;alert\(&#34;x&#34;\)&#60;\/script&#62; &#38; &#39;y&#39;<\/td>/);
   assert.doesNotMatch(html, /<script>/);
 });
@@ -63,7 +63,7 @@ test('a coupon in force is taken off the total, while the subtotal and the shipp
 });
 
 test('the shipping fee is reckoned on the subtotal before the discount', () => {
-  const html = renderCart([{ name: 'Balo', price: 55000, quantity: 1 }], applyCoupon({ code: 'GIAM10', applied: '' }));
+  const html = renderCart([{ id: 'balo', name: 'Balo', price: 55000, quantity: 1 }], applyCoupon({ code: 'GIAM10', applied: '' }));
   assert.match(html, /<dd data-testid="shipping">Miễn phí<\/dd>/);
   assert.match(html, /<dd data-testid="total">49\.500\u00a0₫<\/dd>/);
 });
@@ -122,12 +122,12 @@ test('a new code replaces the coupon in force, so there is only one discount lin
 });
 
 test('a cart with a subtotal of 55.000 ₫ shows a discount of -5.500 ₫ with GIAM10', () => {
-  const html = renderCart([{ name: 'Balo', price: 55000, quantity: 1 }], applyCoupon({ code: 'GIAM10', applied: '' }));
+  const html = renderCart([{ id: 'balo', name: 'Balo', price: 55000, quantity: 1 }], applyCoupon({ code: 'GIAM10', applied: '' }));
   assert.match(html, /<dd data-testid="discount">-5\.500\u00a0₫<\/dd>/);
 });
 
 test('a discount of nothing is shown as 0 ₫, without a minus sign', () => {
-  const html = renderCart([{ name: 'Kẹo', price: 5, quantity: 1 }], applyCoupon({ code: 'GIAM10', applied: '' }));
+  const html = renderCart([{ id: 'keo', name: 'Kẹo', price: 5, quantity: 1 }], applyCoupon({ code: 'GIAM10', applied: '' }));
   assert.match(html, /<dt>Giảm giá \(GIAM10\)<\/dt><dd data-testid="discount">0\u00a0₫<\/dd>/);
 });
 

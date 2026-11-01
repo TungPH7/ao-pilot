@@ -2,6 +2,7 @@ import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { request, type IncomingHttpHeaders } from 'node:http';
 import { connect, type AddressInfo } from 'node:net';
+import type { CartItem } from './page.ts';
 import { cartServer, SAMPLE_CART } from './server.ts';
 
 const POLICY = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
@@ -138,7 +139,23 @@ test('a path that only looks like / is 404, and the server keeps answering', asy
 });
 
 test('a cart the page cannot show stops the server from being made, not a request', () => {
-  assert.throws(() => cartServer([{ name: 'Bút bi', price: -1, quantity: 1 }]), RangeError);
+  assert.throws(() => cartServer([{ id: 'but-bi', name: 'Bút bi', price: -1, quantity: 1 }]), RangeError);
+});
+
+test('the lines of the sample cart have the fixed ids but-bi and so-tay', () => {
+  assert.deepEqual(SAMPLE_CART.map((item) => item.id), ['but-bi', 'so-tay']);
+});
+
+test('a cart whose lines do not each have an id of their own stops the server from being made, not a request', () => {
+  const twice: CartItem[] = [
+    { id: 'but-bi', name: 'Bút bi', price: 5000, quantity: 3 },
+    { id: 'but-bi', name: 'Sổ tay', price: 12000, quantity: 2 },
+  ];
+  assert.throws(() => cartServer(twice), RangeError, 'the same id twice');
+  assert.throws(() => cartServer([{ id: '', name: 'Bút bi', price: 5000, quantity: 3 }]), RangeError, 'an empty id');
+  assert.throws(() => cartServer([{ id: 'BUT-BI', name: 'Bút bi', price: 5000, quantity: 3 }]), RangeError, 'an id in upper case');
+  const noId = { name: 'Bút bi', price: 5000, quantity: 3 } as unknown as CartItem;
+  assert.throws(() => cartServer([noId]), RangeError, 'a line without an id, as from a cart written in JavaScript');
 });
 
 // AC11: the server answers only the names it is reached by on this machine, so a page that rebinds its own name to
