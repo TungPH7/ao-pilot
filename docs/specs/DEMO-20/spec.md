@@ -1,6 +1,6 @@
 # Spec: Xóa sản phẩm khỏi giỏ hàng
 
-> **Epic:** DEMO-20 · **Jira:** https://phunghuutung12b4.atlassian.net/browse/DEMO-20 · **Status:** Draft
+> **Epic:** DEMO-20 · **Jira:** https://phunghuutung12b4.atlassian.net/browse/DEMO-20 · **Status:** Approved 2026-11-01
 
 ## Objective
 

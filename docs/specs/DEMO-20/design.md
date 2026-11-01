@@ -1,6 +1,6 @@
 # Design: Xóa sản phẩm khỏi giỏ hàng
 
-> **Epic:** DEMO-20 · **Jira:** https://phunghuutung12b4.atlassian.net/browse/DEMO-20 · **Spec:** docs/specs/DEMO-20/spec.md · **Status:** Draft
+> **Epic:** DEMO-20 · **Jira:** https://phunghuutung12b4.atlassian.net/browse/DEMO-20 · **Spec:** docs/specs/DEMO-20/spec.md · **Status:** Approved 2026-11-01
 >
 > **Figma version:** none
 
