@@ -9,7 +9,7 @@ Sandbox repository for the ai-orchestrator live tests (Jira space `DEMO`).
 
 ## The cart server
 
-`GET /` and `HEAD /` return the cart page. `POST /` applies a coupon and returns the page with the new total.
+`GET /` and `HEAD /` return the cart page. `POST /` removes a line or applies a coupon, and returns the page with the lines that stay and the new total.
 
 The server checks every request in this order:
 
@@ -21,14 +21,18 @@ The server checks every request in this order:
 | 4 | A method other than `GET`, `HEAD`, `POST` | 405 `Method not allowed`, `Allow: GET, HEAD, POST` |
 | 5 | `POST` whose `Origin` is not `http://<Host>`, including no `Origin` or `null` | 403 `Forbidden` |
 | 6 | `POST` with a body over 1024 bytes, with or without a `Content-Length` | 413 `Payload too large`, `Connection: close` |
-| 7 | `POST` | 200, the cart page with the coupon of the form |
+| 7 | `POST` | 200, the cart page with the lines that stay and the coupon of the form |
 
 The body of `POST /` is read as `application/x-www-form-urlencoded`, whatever its `Content-Type`:
 
-- `code`: the code as typed. It is trimmed and upper-cased before it is looked up.
+- `remove`: the id of the line to remove, sent by the "Xóa" button of the line. A body with this field, even empty, is a remove request. Only its first value is read.
+- `removed`: the id of a line removed before, once per line, sent back by the page in hidden fields of every form.
+- `code`: the code as typed. It is trimmed and upper-cased before it is looked up. A remove request does not read `code`: it shows no message about a code, and keeps the coupon applied before.
 - `applied`: the code applied before, sent back by the page in a hidden field. The server checks it against the list again.
 
-The server keeps no state and reads no amount from the form. A code of the list replaces the one applied before; an empty or unknown code keeps it.
+The server keeps no state and reads no name, price, quantity or amount from the form: every number comes from the cart of the server. The lines that stay are the lines of that cart whose id is neither `remove` nor one of `removed`. Ids are compared as they are, and an id that is no line of the cart, a repeated one or an empty one is ignored. A code of the list replaces the one applied before; an empty or unknown code keeps it.
+
+Every line of a cart has a fixed id of 1 to 32 characters among `a`–`z`, `0`–`9` and `-`, used by no other line; the lines of the sample cart are `but-bi` and `so-tay`. `cartServer(items)` throws a `RangeError` for a cart that breaks this rule, when the server is made.
 
 The coupons are a fixed list in `src/coupon.ts`:
 
