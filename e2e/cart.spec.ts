@@ -20,3 +20,12 @@ test('AC2 shows the subtotal, a shipping fee of 3.000 ₫ and their sum as the t
   await expect(page.getByTestId('shipping')).toHaveText('3.000 ₫');
   await expect(page.getByTestId('total')).toHaveText('42.000 ₫');
 });
+
+// DEMO-28. The request is sent here because the policy of the cart page stops Chrome from asking for the icon, so a
+// check of the console would pass with or without the fix.
+test('DEMO-28 answers /favicon.ico with 204 and no content', async ({ request }) => {
+  const favicon = await request.get('/favicon.ico');
+
+  expect(favicon.status()).toBe(204);
+  expect(await favicon.body()).toHaveLength(0);
+});

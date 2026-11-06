@@ -142,6 +142,44 @@ test('a path that only looks like / is 404, and the server keeps answering', asy
   assert.equal((await send(`${url}/`)).status, 200, 'still running');
 });
 
+// DEMO-28: a browser asks for /favicon.ico on its own, and a 404 there is an error in its console.
+test('GET /favicon.ico is 204 with no body and no Content-Type', async (t) => {
+  const url = await start(t);
+  const response = await send(`${url}/favicon.ico`);
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.get('content-type'), null);
+  assert.equal(await response.text(), '');
+});
+
+test('HEAD /favicon.ico is 204, like its GET', async (t) => {
+  const url = await start(t);
+  assert.equal((await send(`${url}/favicon.ico`, { method: 'HEAD' })).status, 204);
+});
+
+test('a query string does not change the answer of /favicon.ico', async (t) => {
+  const url = await start(t);
+  assert.equal((await send(`${url}/favicon.ico?v=2`)).status, 204);
+});
+
+test('a path that only looks like /favicon.ico is still 404', async (t) => {
+  const url = await start(t);
+  for (const path of ['/favicon.ico/', '/favicon.icon', '/FAVICON.ICO', '//favicon.ico', '/static/favicon.ico']) {
+    assert.equal((await send(`${url}${path}`)).status, 404, path);
+  }
+});
+
+test('a POST to /favicon.ico is still 404, as on any path that is not /', async (t) => {
+  const url = await start(t);
+  assert.equal((await send(`${url}/favicon.ico`, { method: 'POST', body: 'x' })).status, 404);
+});
+
+test('a Host that is not this server is 400 on /favicon.ico too', async (t) => {
+  const url = await start(t);
+  const { status, body } = await raw(url, { path: '/favicon.ico', headers: ['Host', 'evil.example'] });
+  assert.equal(status, 400);
+  assert.equal(body, 'Bad request');
+});
+
 test('a cart the page cannot show stops the server from being made, not a request', () => {
   assert.throws(() => cartServer([{ id: 'but-bi', name: 'Bút bi', price: -1, quantity: 1 }]), RangeError);
 });

@@ -67,7 +67,8 @@ function ownOrigin(host: string, port: number, site: PublicSite | undefined): st
 
 // The cart page at /: GET and HEAD answer the page made once, POST / the page of the lines that stay once the lines
 // of its form are removed, with the coupon of its form. The checks run in the order of the plan: a Host that does not
-// name this server is 400, before anything else (AC11 of DEMO-11); another path is 404; another method 405; a POST
+// name this server is 400, before anything else (AC11 of DEMO-11); GET and HEAD /favicon.ico are 204, so a browser logs
+// no error for the icon it asks for on its own (DEMO-28); another path is 404; another method 405; a POST
 // without the Origin of this server 403, before its body is read (AC9 of DEMO-11); a body over BODY_LIMIT bytes 413
 // (AC10 of DEMO-11). The path is the request target up to its query string, read as is: `//` or `//host/` is not /.
 // A cart the page cannot show (total() throws a RangeError) fails here and not on a request, and discount() does not
@@ -83,6 +84,8 @@ export function cartServer(items: CartItem[] = SAMPLE_CART, site?: PublicSite): 
     const path = (request.url ?? '/').split('?', 1)[0];
     if (host === undefined) {
       response.writeHead(400, TEXT_HEADERS).end('Bad request');
+    } else if (path === '/favicon.ico' && (request.method === 'GET' || request.method === 'HEAD')) {
+      response.writeHead(204).end();
     } else if (path !== '/') {
       response.writeHead(404, TEXT_HEADERS).end('Not found');
     } else if (request.method === 'GET' || request.method === 'HEAD') {
