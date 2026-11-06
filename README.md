@@ -5,6 +5,7 @@ Sandbox repository for the ai-orchestrator live tests (Jira space `DEMO`).
 - `.ai-orchestrator/`: hand-made copy of the kit, with the contract, the templates, the agent roster and the scripts.
 - `.claude/`: the kit hooks, the project settings, the ten agents, the shared rules and the vendored skills.
 - `.github/workflows/`: the kit's `CI`, `jira-sync`, `merge-gate` and `audit`, and a pretend `Deploy`.
+- `Dockerfile`: the image of the cart server for the deployer of the kit (see Deployment).
 - `src/`: a small cart (`cart.ts`), its coupons (`coupon.ts`) and its page, rendered on the server (`page.ts`, `server.ts`).
 
 ## The cart server
@@ -15,11 +16,11 @@ The server checks every request in this order:
 
 | Step | When | Answer |
 |---|---|---|
-| 1 | The request does not have exactly one `Host`, equal to `127.0.0.1:<port>` or `localhost:<port>` | 400 `Bad request` |
+| 1 | The request does not have exactly one `Host`, equal to `127.0.0.1:<port>`, `localhost:<port>` or the host of `AO_PUBLIC_URL` | 400 `Bad request` |
 | 2 | The path is not `/` | 404 `Not found` |
 | 3 | `GET` or `HEAD` | 200, the cart page |
 | 4 | A method other than `GET`, `HEAD`, `POST` | 405 `Method not allowed`, `Allow: GET, HEAD, POST` |
-| 5 | `POST` whose `Origin` is not `http://<Host>`, including no `Origin` or `null` | 403 `Forbidden` |
+| 5 | `POST` whose `Origin` is not `http://<Host>`, or the origin of `AO_PUBLIC_URL` for its host, including no `Origin` or `null` | 403 `Forbidden` |
 | 6 | `POST` with a body over 1024 bytes, with or without a `Content-Length` | 413 `Payload too large`, `Connection: close` |
 | 7 | `POST` | 200, the cart page with the lines that stay and the coupon of the form |
 
@@ -50,8 +51,21 @@ A client that is not a browser sends its own `Origin` on `POST /`, such as `curl
 ```
 npm test              # unit tests
 npm run test:coverage # unit tests with coverage, lcov in coverage/lcov.info
-npm run serve         # the cart page on http://127.0.0.1:3000/ (PORT changes the port)
+npm run serve         # the cart page on http://127.0.0.1:3000/ (HOST and PORT change them)
 npm run test:e2e      # Playwright E2E tests with the Chrome installed on this machine
 ```
 
 E2E tests do not run in CI yet. Their names start with the acceptance criterion they cover, such as `AC1 …`.
+
+With `E2E_BASE_URL`, such as `https://pilot-dev.ao.t2g.io.vn`, the tests run against that environment, with basic auth from `E2E_HTTP_USER` and `E2E_HTTP_PASSWORD` when both are set. The tests tagged `@local` send requests a browser cannot send, so they still run on the server Playwright starts on this machine (`playwright.config.ts`).
+
+## Deployment
+
+The deployer of the kit builds the `Dockerfile` and runs one container per environment behind Caddy, which keeps HTTPS and basic auth and passes the public `Host` on as is (ADR-0003). The container runs as the user `node`, works with `--cap-drop ALL` and `--security-opt no-new-privileges`, and reads:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `HOST` | `127.0.0.1` with `npm run serve`, `0.0.0.0` in the image | The address the server listens on |
+| `PORT` | `3000` | The port the server listens on |
+| `AO_PUBLIC_URL` | none | The public URL of the environment, such as `https://pilot-dev.ao.t2g.io.vn`: its host and origin are accepted besides the local ones. A value that is not an http or https origin stops the server at start |
+
