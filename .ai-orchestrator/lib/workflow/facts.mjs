@@ -6,7 +6,7 @@
 import { docsPullRequest, gatePassage } from '../quality/docs-pr.mjs';
 import { docsRule } from '../quality/gates.mjs';
 import { approved, botLogin, protectedPaths } from '../quality/merge-gate.mjs';
-import { openCounts, readReviewReport } from '../quality/pull-request.mjs';
+import { openFindings, readReviewReport } from '../quality/pull-request.mjs';
 import { parseBranch } from '../tracker/conventions.mjs';
 import { expectedOptions } from '../tracker/expected.mjs';
 import { changesRequestedOn, githubGuards, jiraGuards, qaEnvironment, readChecks } from '../tracker/facts.mjs';
@@ -90,8 +90,8 @@ const blockedByOf = (fields) => (fields.issuelinks ?? []).filter(({ type, inward
 // The Stories, Tasks and Bugs of an Epic, which ba creates in stage plan.
 // Each comes with its Sub-tasks: a Story split into Sub-tasks carries its role and effort labels on them.
 async function readChildren(jira, epic, { contract, mapping, roster, space }) {
-  const item = ({ key, fields }) => ({ key, summary: fields.summary, ...locate(fields.issuetype.name, fields.status.name, contract, mapping), status: fields.status.name, labels: fields.labels ?? [], blockedBy: blockedByOf(fields), ...workLabels(fields.labels ?? [], mapping, roster) });
-  const found = await jira.searchAll(`project = "${space}" AND parent = "${epic}"`, ['summary', 'issuetype', 'status', 'labels', 'issuelinks']);
+  const item = ({ key, fields }) => ({ key, summary: fields.summary, ...locate(fields.issuetype.name, fields.status.name, contract, mapping), status: fields.status.name, labels: fields.labels ?? [], blockedBy: blockedByOf(fields), fixVersions: (fields.fixVersions ?? []).map(({ name, released }) => ({ name, released: Boolean(released) })), ...workLabels(fields.labels ?? [], mapping, roster) });
+  const found = await jira.searchAll(`project = "${space}" AND parent = "${epic}"`, ['summary', 'issuetype', 'status', 'labels', 'issuelinks', 'fixVersions']);
   const keys = found.map(({ key }) => `"${key}"`);
   const subtasks = keys.length > 0 ? await jira.searchAll(`project = "${space}" AND parent in (${keys.join(', ')})`, ['summary', 'issuetype', 'status', 'labels', 'parent']) : [];
   return found.map((child) => ({ ...item(child), subtasks: subtasks.filter(({ fields }) => fields.parent?.key === child.key).map(item) }));
@@ -186,14 +186,14 @@ export function reviewReports(reviews, { roles, bot, head }) {
   const all = reviews
     .filter((r) => r.user?.login === bot)
     .map((r) => ({ ...readReviewReport(r.body, roles), sha: r.commit_id, at: r.submitted_at, state: r.state }));
-  // blocking: the Critical and High findings open after the report, with those a report of the new part carries
-  // (openCounts); open: those the report itself names, for the next review of the new part to check.
-  const counts = new Map(roles.flatMap((role) => {
+  // open: the Critical and High findings open after the report, with those a report of the new part carries
+  // (openFindings), for the next review of the new part to check; blocking: how many.
+  const after = new Map(roles.flatMap((role) => {
     const mine = all.filter((report) => report.role === role);
-    return openCounts(mine).map((count, i) => [mine[i], count]);
+    return openFindings(mine).map((open, i) => [mine[i], open]);
   }));
-  const named = (report) => (report.blocking ?? []).map(({ severity, where, finding }) => ({ severity, where, finding }));
-  const brief = (report) => (report ? { sha: report.sha, at: report.at, ok: report.ok, blocking: counts.get(report) ?? 0, open: named(report), state: report.state, onHead: report.sha === head } : null);
+  const named = (report) => (after.get(report) ?? []).map(({ severity, where, finding }) => ({ severity, where, finding }));
+  const brief = (report) => (report ? { sha: report.sha, at: report.at, ok: report.ok, blocking: named(report).length, open: named(report), state: report.state, onHead: report.sha === head } : null);
   const reports = Object.fromEntries(roles.map((role) => [role, brief(all.filter((report) => report.role === role).at(-1))]));
   return { reports, securityFull: brief(all.filter((report) => report.role === 'security' && !report.scope).at(-1)) };
 }
@@ -310,6 +310,8 @@ async function readSpace({ jira, github, deploys, local, contract, mapping, rost
       requests: openRequests(comments, names),
     };
   });
+  // An Epic In Progress with its items: /ao-status says when it can be completed.
+  for (const epic of items.filter(({ workType, state }) => workType === 'epic' && state === 'in-progress')) epic.children = await readChildren(jira, epic.key, { contract, mapping, roster, space });
   const pulls = (await github.getAll('/pulls', { state: 'open', sort: 'created', direction: 'asc' })).map((pr) => ({ number: pr.number, title: pr.title, headRef: pr.head.ref, key: parseBranch(pr.head.ref)?.key ?? null, draft: Boolean(pr.draft) }));
   // The release lines of /ao-status need deployments, which only your gh login reads (release-workflow T12, T16).
   const release = deploys ? await readStatusRelease({ jira, deploys, contract, mapping, space }) : undefined;
@@ -400,6 +402,14 @@ export async function readCutFacts({ jira, deploys, history, contract, mapping, 
 
 const NOTES = ['changelog.md', 'pr-description.md', 'fix-version.md'];
 
+// Notes of devops written before the newest regression: the release branch may hold more since, such as a Bug fixed on
+// it (T21). With no run of release-notes on record, the files are taken as they are.
+function notesStale(runs) {
+  const last = (purpose) => runs.findLastIndex((r) => r.purpose === purpose && r.outcome === 'done');
+  const notes = last('release-notes');
+  return notes >= 0 && last('regression') > notes;
+}
+
 // What /ao-ship vX.Y.0 decides on (release-workflow spec 2.7): its release branch, the release Staging runs, the Bugs
 // Critical and High still open with its Fix Version, the newest regression on record in .ai/runs/<version>/ (the
 // commit it ran on, from state.json, and the Result line of its report), the files the branch changed since that
@@ -430,7 +440,7 @@ export async function readShipFacts({ jira, github, deploys, local, contract, ma
     bugs,
     regression,
     changedSinceRegression,
-    notes: NOTES.every((name) => local.runFile(version, name) !== null),
+    notes: NOTES.every((name) => local.runFile(version, name) !== null) && !notesStale(local.runState(version)?.runs ?? []),
     pr: pr ? { number: pr.number, headSha: pr.head.sha } : null,
   };
 }

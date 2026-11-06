@@ -15,7 +15,8 @@
 //                                 Jira); resolves notes for state.json and last.md (optional)
 //   act(step)                     a script step of a release command, such as cutting the release branch; resolves notes
 //                                 for last.md. It is the one step of its command (optional)
-//   store                         { readState(key), writeState(key, state), writeLast(key, text) }
+//   store                         { readState(key), writeState(key, state), writeLast(key, text) }; a run is written when it
+//                                 starts and again when it ends
 //   sleep(ms), now(), log(line)
 // Agents run one after another, never two at once.
 import { packNote, qaWorktreeNote, worktreeNote } from './prompts.mjs';
@@ -103,6 +104,25 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
     }
     const treeNote = tree && (next.worktree.kind === 'qa' ? qaWorktreeNote : worktreeNote)(tree.path, next.worktree.sha);
     const notes = [file && packNote(file), treeNote].filter(Boolean);
+    const run = {
+      n,
+      command,
+      role: next.role,
+      key: next.key,
+      purpose: next.purpose,
+      effort: next.effort,
+      log: logName,
+      startedAt,
+      ...(next.resume && { resumed: true }),
+      ...(next.checkout && { checkout: next.checkout }),
+      ...(next.head && { head: next.head }),
+      ...(next.note && { note: next.note }),
+      // The release a qa run tested: /ao-ship checks its regression still holds for the head (release-workflow T15).
+      ...(next.qa && { qa: { environment: next.qa.environment, sha: next.qa.sha } }),
+    };
+    // On record from its start: a shell killed during the run leaves it unfinished, and the next command goes on in the
+    // session of its log (release-workflow T22). What its session cost so far stays, for the run that resumes it.
+    store.writeState(key, { ...state, runs: [...state.runs, { ...run, session: next.resume ?? null, outcome: 'unfinished', turns: 0, durationMs: 0, costUsd: 0, ...(resumed?.cumulative && { cumulative: resumed.cumulative }) }] });
     let lines;
     let stopped;
     let runNotes = [];
@@ -118,12 +138,7 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
     if (stopped) log(`${next.role} stayed alive after its result and was stopped with what it left running`);
     const read = readRun(lines, resumed);
     const record = {
-      n,
-      command,
-      role: next.role,
-      key: next.key,
-      purpose: next.purpose,
-      effort: next.effort,
+      ...run,
       session: read.session,
       outcome: read.outcome,
       turns: read.turns,
@@ -132,17 +147,9 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
       tokens: read.tokens,
       cumulative: read.cumulative,
       denials: read.denials.length,
-      log: logName,
-      startedAt,
       endedAt: new Date(now()).toISOString(),
-      ...(next.resume && { resumed: true }),
       ...(stopped && { stoppedAfterResult: true }),
-      ...(next.checkout && { checkout: next.checkout }),
-      ...(next.head && { head: next.head }),
-      ...(next.note && { note: next.note }),
       ...(runNotes.length > 0 && { notes: runNotes }),
-      // The release a qa run tested: /ao-ship checks its regression still holds for the head (release-workflow T15).
-      ...(next.qa && { qa: { environment: next.qa.environment, sha: next.qa.sha } }),
       text: read.text.length > TEXT_MAX ? `${read.text.slice(0, TEXT_MAX)} … [cut at ${TEXT_MAX} characters; the whole answer is in ${logName}]` : read.text,
     };
     // state.json is written before anything else, so a stopped shell can go on from here.
