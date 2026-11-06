@@ -12,6 +12,7 @@ export function basicAuthEnv(envAuth) {
 const short = (sha) => (sha ? sha.slice(0, 8) : 'nothing');
 const title = (env) => `${env[0].toUpperCase()}${env.slice(1)}`;
 const TRACE = /(^|\/)trace\.zip$/;
+const MEDIA = /\.(png|jpe?g|gif|webp|webm|mp4)$/i;
 
 // run: the qa run ({ key, qa: { environment, sha, auth } }); tree: its worktree ({ path }). list(dir) gives the files
 // under a folder, [] when there is none; attach(key, files) resolves { attached, skipped } (lib/tracker/attachments.mjs);
@@ -19,12 +20,15 @@ const TRACE = /(^|\/)trace\.zip$/;
 // runs there now. Resolves notes for state.json and last.md.
 // Behind basic auth (qa.auth) the traces are kept, not attached: Playwright writes the context options, httpCredentials
 // with the password in clear, into every trace (seen at T19 of release-workflow), and Jira would show it to its readers.
+// Of .ai/qa/<KEY>/ only images and videos go then: qa may have pointed outputDir there, as it did on DEMO-12.
 export async function qaFollowUp({ run, tree, projectDir, list, attach, keep, running }) {
   const notes = [];
   const dir = (path) => path.replaceAll('\\', '/').replace(/\/+$/, '');
   const traces = tree ? list(`${dir(tree.path)}/test-results`).filter((file) => TRACE.test(file)) : [];
   const local = run.qa.auth ? traces : [];
-  const files = [...list(`${dir(projectDir)}/.ai/qa/${run.key}`), ...(run.qa.auth ? [] : traces)];
+  const folder = list(`${dir(projectDir)}/.ai/qa/${run.key}`);
+  const held = run.qa.auth ? folder.filter((file) => !MEDIA.test(file)) : [];
+  const files = [...folder.filter((file) => !held.includes(file)), ...(run.qa.auth ? [] : traces)];
   if (files.length > 0) {
     try {
       const { attached, skipped } = await attach(run.key, files);
@@ -33,6 +37,9 @@ export async function qaFollowUp({ run, tree, projectDir, list, attach, keep, ru
     } catch (error) {
       notes.push(`The evidence was not attached: ${error.message}. It stays in .ai/qa/${run.key}/.`);
     }
+  }
+  if (held.length > 0) {
+    notes.push(`Behind the basic auth of ${title(run.qa.environment)} only images and videos go to Jira, so these stay in .ai/qa/${run.key}/: ${held.map((file) => file.split('/').pop()).join(', ')}.`);
   }
   if (local.length > 0) {
     const what = local.length === 1 ? '1 Playwright trace of the run holds' : `${local.length} Playwright traces of the run hold`;
