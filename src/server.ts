@@ -26,17 +26,23 @@ export interface PublicSite {
 }
 
 // The public site of url, which must be an http or https origin with nothing after it but an optional /. A URL that is
-// not one throws a RangeError, so a server set up wrong stops at start instead of refusing every request.
+// not one throws a RangeError, so a server set up wrong stops at start instead of refusing every request. The message
+// says what is wrong and never quotes url, which may hold a user and a password, so the log of the container does not.
 export function publicSite(url: string): PublicSite {
   let parsed: URL;
   try {
     parsed = new URL(url);
   } catch {
-    throw new RangeError(`AO_PUBLIC_URL is not a URL: ${url}`);
+    throw new RangeError('AO_PUBLIC_URL is not a URL; it must be an http or https origin, such as https://example.com');
   }
-  const bare = parsed.username === '' && parsed.password === '' && parsed.pathname === '/' && parsed.search === '' && parsed.hash === '';
-  if (!['http:', 'https:'].includes(parsed.protocol) || !bare) {
-    throw new RangeError(`AO_PUBLIC_URL must be an http or https origin, such as https://example.com: ${url}`);
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new RangeError('AO_PUBLIC_URL must start with http:// or https://, such as https://example.com');
+  }
+  if (parsed.username !== '' || parsed.password !== '') {
+    throw new RangeError('AO_PUBLIC_URL must not hold a user or a password: basic auth is the job of the proxy');
+  }
+  if (parsed.pathname !== '/' || parsed.search !== '' || parsed.hash !== '') {
+    throw new RangeError('AO_PUBLIC_URL must have no path, query or fragment after its host and port, only an optional /');
   }
   return { host: parsed.host, origin: parsed.origin };
 }
@@ -135,14 +141,59 @@ function readBody(request: IncomingMessage, done: (body: string) => void, tooLar
   });
 }
 
-// npm run serve: on HOST or 127.0.0.1, so only this machine reaches it by default, and on PORT or 3000. A container
-// behind a proxy gets HOST=0.0.0.0 and AO_PUBLIC_URL, the public URL of its environment (ADR-0003); an empty
-// AO_PUBLIC_URL counts as none. import.meta.main needs Node 24.2 (package.json engines).
+// Where npm run serve listens, and the public site it accepts besides the names of this machine.
+export interface ServeOptions {
+  host: string;
+  port: number;
+  site: PublicSite | undefined;
+}
+
+// The options of npm run serve from env: HOST or 127.0.0.1, so only this machine reaches it by default; PORT or 3000;
+// the public site of AO_PUBLIC_URL, the public URL of the environment of a container behind a proxy (ADR-0003). An
+// empty HOST or AO_PUBLIC_URL counts as none. An AO_PUBLIC_URL that is not an http or https origin throws the
+// RangeError of publicSite(), whose message does not quote it.
+export function serveOptions(env: Record<string, string | undefined>): ServeOptions {
+  return {
+    host: env.HOST || '127.0.0.1',
+    port: Number(env.PORT ?? 3000),
+    site: env.AO_PUBLIC_URL ? publicSite(env.AO_PUBLIC_URL) : undefined,
+  };
+}
+
+// The part of process that stopOnSignals() uses, so a test can pass its own.
+export interface SignalTarget {
+  once(signal: 'SIGTERM' | 'SIGINT', listener: () => void): unknown;
+  exit(code: number): void;
+}
+
+// On the first SIGTERM or SIGINT, server stops taking connections and closes the idle ones, and once the requests in
+// progress end, the process exits with 0. In a container node runs as PID 1, which has no default action on SIGTERM,
+// so without this docker stop would wait its 10 seconds and kill it.
+export function stopOnSignals(server: Server, target: SignalTarget = process): void {
+  let stopping = false;
+  const stop = () => {
+    if (stopping) return;
+    stopping = true;
+    server.close(() => target.exit(0));
+  };
+  target.once('SIGTERM', stop);
+  target.once('SIGINT', stop);
+}
+
+// npm run serve, and the CMD of the image. import.meta.main needs Node 24.2 (package.json engines).
 if (import.meta.main) {
-  const host = process.env.HOST || '127.0.0.1';
-  const port = Number(process.env.PORT ?? 3000);
-  const site = process.env.AO_PUBLIC_URL ? publicSite(process.env.AO_PUBLIC_URL) : undefined;
-  cartServer(SAMPLE_CART, site).listen(port, host, () => {
-    console.log(`Cart page on http://${host}:${port}/${site === undefined ? '' : `, public at ${site.origin}/`}`);
-  });
+  let options: ServeOptions | undefined;
+  try {
+    options = serveOptions(process.env);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : 'The options of the server are wrong');
+    process.exitCode = 1;
+  }
+  if (options !== undefined) {
+    const { host, port, site } = options;
+    const server = cartServer(SAMPLE_CART, site).listen(port, host, () => {
+      console.log(`Cart page on http://${host}:${port}/${site === undefined ? '' : `, public at ${site.origin}/`}`);
+    });
+    stopOnSignals(server);
+  }
 }
