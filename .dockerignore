@@ -1,0 +1,19 @@
+# The image needs only package.json and the server code of src/ (Dockerfile).
+docs/
+*.md
+node_modules/
+.git/
+.ai/
+coverage/
+test-results/
+playwright-report/
+dist/
+e2e/
+src/**/*.test.ts
+.github/
+.githooks/
+.claude/
+.ai-orchestrator/
+.jira/
+.mcp.json
+.env*
