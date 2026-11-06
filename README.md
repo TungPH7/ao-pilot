@@ -17,12 +17,13 @@ The server checks every request in this order:
 | Step | When | Answer |
 |---|---|---|
 | 1 | The request does not have exactly one `Host`, equal to `127.0.0.1:<port>`, `localhost:<port>` or the host of `AO_PUBLIC_URL` | 400 `Bad request` |
-| 2 | The path is not `/` | 404 `Not found` |
-| 3 | `GET` or `HEAD` | 200, the cart page |
-| 4 | A method other than `GET`, `HEAD`, `POST` | 405 `Method not allowed`, `Allow: GET, HEAD, POST` |
-| 5 | `POST` whose `Origin` is not `http://<Host>`, or the origin of `AO_PUBLIC_URL` for its host, including no `Origin` or `null` | 403 `Forbidden` |
-| 6 | `POST` with a body over 1024 bytes, with or without a `Content-Length` | 413 `Payload too large`, `Connection: close` |
-| 7 | `POST` | 200, the cart page with the lines that stay and the coupon of the form |
+| 2 | `GET` or `HEAD` of `/favicon.ico` | 204, no content |
+| 3 | The path is not `/` | 404 `Not found` |
+| 4 | `GET` or `HEAD` | 200, the cart page |
+| 5 | A method other than `GET`, `HEAD`, `POST` | 405 `Method not allowed`, `Allow: GET, HEAD, POST` |
+| 6 | `POST` whose `Origin` is not `http://<Host>`, or the origin of `AO_PUBLIC_URL` for its host, including no `Origin` or `null` | 403 `Forbidden` |
+| 7 | `POST` with a body over 1024 bytes, with or without a `Content-Length` | 413 `Payload too large`, `Connection: close` |
+| 8 | `POST` | 200, the cart page with the lines that stay and the coupon of the form |
 
 The body of `POST /` is read as `application/x-www-form-urlencoded`, whatever its `Content-Type`:
 
