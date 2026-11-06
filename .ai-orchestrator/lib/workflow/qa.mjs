@@ -13,13 +13,18 @@ const short = (sha) => (sha ? sha.slice(0, 8) : 'nothing');
 const title = (env) => `${env[0].toUpperCase()}${env.slice(1)}`;
 const TRACE = /(^|\/)trace\.zip$/;
 
-// run: the qa run ({ key, qa: { environment, sha } }); tree: its worktree ({ path }). list(dir) gives the files under a
-// folder, [] when there is none; attach(key, files) resolves { attached, skipped } (lib/tracker/attachments.mjs);
-// running(environment) resolves the sha that runs there now. Resolves notes for state.json and last.md.
-export async function qaFollowUp({ run, tree, projectDir, list, attach, running }) {
+// run: the qa run ({ key, qa: { environment, sha, auth } }); tree: its worktree ({ path }). list(dir) gives the files
+// under a folder, [] when there is none; attach(key, files) resolves { attached, skipped } (lib/tracker/attachments.mjs);
+// keep(key, files) copies files out of the worktree and resolves the folder; running(environment) resolves the sha that
+// runs there now. Resolves notes for state.json and last.md.
+// Behind basic auth (qa.auth) the traces are kept, not attached: Playwright writes the context options, httpCredentials
+// with the password in clear, into every trace (seen at T19 of release-workflow), and Jira would show it to its readers.
+export async function qaFollowUp({ run, tree, projectDir, list, attach, keep, running }) {
   const notes = [];
   const dir = (path) => path.replaceAll('\\', '/').replace(/\/+$/, '');
-  const files = [...list(`${dir(projectDir)}/.ai/qa/${run.key}`), ...(tree ? list(`${dir(tree.path)}/test-results`).filter((file) => TRACE.test(file)) : [])];
+  const traces = tree ? list(`${dir(tree.path)}/test-results`).filter((file) => TRACE.test(file)) : [];
+  const local = run.qa.auth ? traces : [];
+  const files = [...list(`${dir(projectDir)}/.ai/qa/${run.key}`), ...(run.qa.auth ? [] : traces)];
   if (files.length > 0) {
     try {
       const { attached, skipped } = await attach(run.key, files);
@@ -27,6 +32,15 @@ export async function qaFollowUp({ run, tree, projectDir, list, attach, running 
       notes.push(`Attached to ${run.key}: ${attached.length > 0 ? attached.join(', ') : 'no file'}.${over}`);
     } catch (error) {
       notes.push(`The evidence was not attached: ${error.message}. It stays in .ai/qa/${run.key}/.`);
+    }
+  }
+  if (local.length > 0) {
+    const what = local.length === 1 ? '1 Playwright trace of the run holds' : `${local.length} Playwright traces of the run hold`;
+    try {
+      const folder = await keep(run.key, local);
+      notes.push(`The ${what} the basic auth of ${title(run.qa.environment)}, so ${local.length === 1 ? 'it is' : 'they are'} not attached: ${local.length === 1 ? 'it stays' : 'they stay'} on this machine, in ${folder}.`);
+    } catch (error) {
+      notes.push(`The ${what} the basic auth of ${title(run.qa.environment)}, so ${local.length === 1 ? 'it is' : 'they are'} not attached, and keeping ${local.length === 1 ? 'it' : 'them'} failed: ${error.message}.`);
     }
   }
   const now = await running(run.qa.environment);

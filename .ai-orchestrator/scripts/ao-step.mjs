@@ -8,9 +8,9 @@
 // Jira is read with ATLASSIAN_AGENT_TOKEN, GitHub with a read-only token of the ao-review App. Run it from the project
 // root; the kit is in AO_KIT_DIR when set.
 import { spawn, spawnSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { parse } from 'yaml';
@@ -538,6 +538,13 @@ function afterQa(run, tree, { deploys, mapping }) {
     attach: (key, paths) => {
       if (!jira) throw new Error('JIRA_CI_TOKEN is not set in your session');
       return attachEvidence({ jira, key, files: paths });
+    },
+    // .ai/ is ignored by git, so the traces never reach a commit. Each keeps the name of its test folder.
+    keep: async (key, paths) => {
+      const folder = join(runsDir, key, 'traces');
+      mkdirSync(folder, { recursive: true });
+      for (const path of paths) copyFileSync(path, join(folder, `${basename(dirname(path))}-${basename(path)}`));
+      return relative(projectDir, folder).replaceAll('\\', '/');
     },
     running: async (environment) => (await readRunning(deploys, mapping))[environment]?.sha ?? null,
   });
