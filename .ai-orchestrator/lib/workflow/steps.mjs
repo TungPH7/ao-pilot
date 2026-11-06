@@ -22,6 +22,8 @@ const ASKING = ['ba', 'ux', 'sa'];
 // A run that stopped before its end goes on in its session; one that failed counts towards the retry limit.
 const STOPPED = ['unfinished', 'usage-limit'];
 const FAILED = ['error', 'max-turns'];
+// The purposes of the review runs, each on the head of a PR in a worktree.
+const REVIEWS = ['review', 'review-delta'];
 // sa's part of stage spec: the heading it adds under the SPEC's Objective (agents/prompts/sa.md).
 const NFR = /^#{2,4}\s+Non-functional requirements\s*$/im;
 // A SPEC that has screens names design.md, where ux writes them.
@@ -56,7 +58,20 @@ function carryOn(command, facts, options, asker) {
   }
   if (!last) return null;
   if (STOPPED.includes(last.outcome)) {
-    return go([{ role: last.role, key, effort: last.effort, purpose: last.purpose, resume: last.session, prompt: resumePrompt(key), checkout: last.checkout }]);
+    // A run is on record from its start (lib/workflow/runner.mjs): one killed before the first line of its log has no
+    // session, and is made afresh (reviewer of ao-pilot PR #23).
+    if (!last.session) return null;
+    const goOn = { role: last.role, key, effort: last.effort, purpose: last.purpose, resume: last.session, prompt: resumePrompt(key) };
+    if (REVIEWS.includes(last.purpose)) {
+      // A review goes on only on the head it was reviewing, with its worktree back, while its report is not on that
+      // head: on a new head, ao-pr would post what it wrote about the old one as the report of the new head.
+      const { pr } = facts;
+      if (!pr || !last.head || last.head !== pr.headSha || pr.reports?.[last.role]?.onHead) return null;
+      return go([{ ...goOn, checkout: last.checkout, head: last.head, worktree: { name: `pr-${pr.number}`, sha: last.head } }]);
+    }
+    // A build goes on where its agent left the checkout, on the branch it made, as build-again does: the checkout of
+    // its first run is develop.
+    return go([{ ...goOn, checkout: last.purpose === 'build' ? undefined : last.checkout }]);
   }
   const limit = options.contract.retry.agent_failures_before_stop;
   let failures = 0;
@@ -361,7 +376,8 @@ function decideBuild(facts, options) {
 function reviewRuns(facts, options) {
   const { pr, item } = facts;
   const runs = [];
-  const place = { checkout: { branch: pr.base, pull: true }, worktree: { name: `pr-${pr.number}`, sha: pr.headSha } };
+  // head: kept in state.json, so a stopped review goes on only on the head it was reviewing (carryOn).
+  const place = { checkout: { branch: pr.base, pull: true }, worktree: { name: `pr-${pr.number}`, sha: pr.headSha }, head: pr.headSha };
   if (!pr.reports.reviewer?.onHead) runs.push({ role: 'reviewer', key: item.key, effort: options.roster.roles.reviewer.effort, purpose: 'review', prompt: promptFor('review', { pr: pr.number }), ...place });
   const scope = securityScope({ report: pr.reports.security, full: pr.securityFull, compare: pr.securityCompare, gates: options.gates });
   if (scope.mode === 'full') {
@@ -592,6 +608,7 @@ function decideHotfix(facts) {
   const h = facts.hotfix;
   const v = h.version;
   if (!h.production) return stop('Production runs no tagged release, so there is nothing to patch', '/ao-status');
+  if (h.production.sha === h.main.sha) return stop(`Production runs ${h.production.version} (${eight(h.main.sha)}), the hotfix: nothing is left to ship`, '/ao-status');
   // Its own tag moved the next patch on, so the request comes first (T22).
   if (h.tag?.sha === h.main.sha && h.request?.sha === h.main.sha) return stop(`${v} is tagged and deployment request #${h.request.id} asks for it on Production: the deployer takes it within a minute or two`, '/ao-status');
   if (v !== h.expected) return stop(`${v} is not the next patch of ${h.production.version} on Production: that is ${h.expected}`, `/ao-ship ${h.expected}`);

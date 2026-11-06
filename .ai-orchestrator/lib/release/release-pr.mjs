@@ -17,7 +17,7 @@ export function changelogWith(current, section, version) {
   const heading = new RegExp(`^##\\s+\\[?v?${escape(version.replace(/^v/, ''))}\\]?(?=\\s|$)`, 'm');
   const at = current.search(heading);
   if (at >= 0) {
-    const next = current.slice(at + 1).search(/^## /m);
+    const next = current.slice(at + 1).search(/^##\s+\[?v?\d+\.\d+/m);
     const end = next < 0 ? current.length : at + 1 + next;
     // The blank lines that closed the old section close the new one, so the same notes give the same file.
     const trailing = /\n*$/.exec(current.slice(at, end))[0] || '\n';

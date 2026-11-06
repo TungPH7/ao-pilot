@@ -71,8 +71,10 @@ export function readReviewReport(body, roles) {
   findings.push(...read(found.Findings, FINDING_COLUMNS, 'finding'));
   // A security review of the new part only says from which commit (dev-workflow spec 2.6). A full review judges anew and
   // clears what was open, so a Scope line a little off, or Earlier findings without one, is no full review: unreadable.
-  const since = text.match(/^Scope:\s*changes since\s+([0-9a-f]{7,40})\s*$/m)?.[1];
-  if (!since && /^[^a-z0-9\n]*scope\b/im.test(text.split(/^## /m)[0])) problems.push('Scope: the line must read "Scope: changes since <short SHA>"');
+  // The Scope line counts only above the first section, under the Role line, where the template puts it.
+  const head = text.split(/^## /m)[0];
+  const since = head.match(/^Scope:\s*changes since\s+([0-9a-f]{7,40})\s*$/m)?.[1];
+  if (!since && /^[^a-z0-9\n]*scope\b/im.test(head)) problems.push('Scope: the line must read "Scope: changes since <short SHA>"');
   if (!since && 'Earlier findings' in found) problems.push('Earlier findings: only a report of the new part has them, under its Scope line');
   // ... and lists the Critical and High findings left open before it, each Fixed or Open.
   const earlier = 'Earlier findings' in found ? read(found['Earlier findings'], EARLIER_COLUMNS, 'earlier finding') : [];

@@ -17,8 +17,9 @@ Every other review covers the whole PR and has no Scope line. When the prompt li
 open, such a review also adds, after Findings, a section "## Earlier findings": a table with the columns
 | Severity | Where | Finding | Status |, one row per finding listed, with Severity, Where and Finding copied from the prompt, and Status Open, or Fixed
 alone or with a colon and how. merge-gate knows a finding by its Where and Finding, and counts one listed as Open,
-one left out, and one fixed only in part as still open. A Scope line that does not read as above makes the report
-unreadable, and an unreadable report clears nothing. -->
+one left out, and one whose Status is anything else, such as "Fixed một phần", as still open. merge-gate reads only
+the form of the Status: writing Open for a finding fixed in part is up to you. The Scope line counts only under the
+Role line; one that does not read as above makes the report unreadable, and an unreadable report clears nothing. -->
 
 ## Context
 
