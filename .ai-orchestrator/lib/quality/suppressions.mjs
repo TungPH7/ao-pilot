@@ -24,9 +24,10 @@ export function addedLines(diff) {
 }
 
 const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-// A pattern that starts with a name, such as xit(, counts only as a whole name: exit( holds xit( but skips no test
-// (release-workflow T19, process.exit in ao-pilot). A pattern that starts otherwise, such as .skip(, counts anywhere.
-const matcher = (pattern) => new RegExp(/^[\w$]/.test(pattern) ? `(?<![\\w$])${escape(pattern)}` : escape(pattern));
+// A call pattern, a name that ends in (, such as xit(, counts only as a whole name: exit( holds xit( but skips no test
+// (release-workflow T19, process.exit in ao-pilot). Every other pattern counts anywhere: gitleaks and semgrep honour
+// their markers with anything glued in front, as in xgitleaks:allow and //_nosemgrep.
+const matcher = (pattern) => new RegExp(/^[\w$].*\($/.test(pattern) ? `(?<![\\w$])${escape(pattern)}` : escape(pattern));
 
 // suppressions: the suppressions block of quality/gates.yaml.
 export function findSuppressions(added, { reason_marker: marker, patterns, never }) {

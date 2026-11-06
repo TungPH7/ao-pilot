@@ -39,6 +39,11 @@ export function buildArgs({ project, app, tree, dockerfile, context }) {
   return ['build', '--file', posix.join(context, dockerfile), '--tag', image(project, app, tree), ...labels, context];
 }
 
+// The mode a file of a build context needs. COPY keeps the modes of the context, and the deployer runs with UMask=0077,
+// so a checkout is 0600 and 0700: an image with a USER other than root could not read its own code (release-workflow
+// T19). The context lives under /var/lib/ao, which is 0700, so opening it shows nothing to anyone else on the VPS.
+export const readableMode = (mode, isDirectory) => mode | 0o044 | (isDirectory || mode & 0o100 ? 0o011 : 0);
+
 // Runs a new container of one app on the project network, without an alias yet, so nothing calls it before its smoke
 // test. `names` are the variables it gets from docker's own environment: names only, never values.
 export function runArgs({ project, env, app, tree, names }) {
@@ -106,6 +111,12 @@ export async function swap({ run, smoke, project, env, tree, config, secrets, pu
       return { outcome: 'failed', failures: [{ app, path: null, problem: `the container did not start: ${error.message}` }], stopped: [] };
     }
     const ip = JSON.parse(await run(['inspect', '--format', '{{json .NetworkSettings.Networks}}', name]))[net].IPAddress;
+    if (!ip) {
+      // It exited, and --restart may be bringing it back: there is nothing to smoke-test yet.
+      const state = (await run(['inspect', '--format', '{{.State.Status}}, exit code {{.State.ExitCode}}', name])).trim();
+      await undo(run, net, project, env, [{ app, name }, ...moved.toReversed()], old);
+      return { outcome: 'failed', failures: [{ app, path: null, problem: `the container has no address: it is ${state}` }], stopped: [] };
+    }
     const host = config.apps[app].public ? new URL(publicUrl).host : `${app}:${port}`;
     const checks = config.smoke.filter((check) => check.app === app);
     if (!checks.some(({ path }) => path === health)) checks.unshift({ app, path: health, expect_status: 200, expect_text: '' });
