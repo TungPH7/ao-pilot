@@ -55,14 +55,17 @@ export function createGitHubClient({ repo, token, fetch = globalThis.fetch, writ
   return { request, get, getAll };
 }
 
-// GITHUB_TOKEN, else the token of the GitHub CLI: `gh auth token`, or on versions before 2.17, which lack it, the
-// Token line of `gh auth status --show-token`, printed on stderr. Returns null when there is none.
+// GITHUB_TOKEN, else GH_TOKEN, the read-only token of an agent session (dev-workflow spec 2.3), else the token of the
+// GitHub CLI: `gh auth token`, or on versions before 2.17, which lack it, the Token line of `gh auth status
+// --show-token`, printed on stderr. Returns null when there is none. A token runs to the first space: the installation
+// token of an App has dots in it (T18).
 export function readGitHubToken({ env = process.env, gh = runGh } = {}) {
   if (env.GITHUB_TOKEN) return env.GITHUB_TOKEN;
+  if (env.GH_TOKEN) return env.GH_TOKEN;
   const token = gh(['auth', 'token']).stdout.trim();
-  if (/^gh[opsu]_\w+$/.test(token)) return token;
+  if (/^gh[opsu]_\S+$/.test(token)) return token;
   const { stdout, stderr } = gh(['auth', 'status', '--show-token']);
-  return `${stdout}${stderr}`.match(/Token: (gh[opsu]_\w+)/)?.[1] ?? null;
+  return `${stdout}${stderr}`.match(/Token: (gh[opsu]_\S+)/)?.[1] ?? null;
 }
 
 // owner/name of the GitHub remote origin of the clone in `dir`; undefined when there is none.

@@ -80,6 +80,10 @@
         "id": { "$ref": "#/$defs/id" },
         "kind": { "enum": ["user", "service-account"] },
         "account": { "$ref": "#/$defs/text" },
+        "account_id": {
+          "type": "string",
+          "pattern": "^[0-9A-Za-z:-]{10,128}$"
+        },
         "group": { "$ref": "#/$defs/id" },
         "roles": {
           "type": "array",

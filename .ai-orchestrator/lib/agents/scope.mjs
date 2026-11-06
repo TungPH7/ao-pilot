@@ -13,7 +13,7 @@ export function writeRefusal(roster, role, path) {
 }
 
 // The git subcommands that only read (spec 2.10). branch, remote and config read only in some forms, below.
-const READ = new Set(['status', 'log', 'show', 'diff', 'fetch', 'rev-parse', 'ls-files', 'ls-tree', 'cat-file', 'merge-base', 'blame', 'grep', 'describe', 'shortlog', 'for-each-ref', 'check-ignore']);
+const READ = new Set(['status', 'log', 'show', 'diff', 'fetch', 'ls-remote', 'rev-parse', 'ls-files', 'ls-tree', 'cat-file', 'merge-base', 'blame', 'grep', 'describe', 'shortlog', 'for-each-ref', 'check-ignore']);
 // git branch options that list; the ones that take a commit may be followed by one.
 const BRANCH_LISTING = new Set(['-a', '--all', '-r', '--remotes', '-l', '--list', '-v', '-vv', '--verbose', '--show-current', '--no-color', '--color', '--column', '--no-column', '-i', '--ignore-case', '--omit-empty']);
 const BRANCH_COMMIT = new Set(['--contains', '--no-contains', '--merged', '--no-merged', '--points-at']);

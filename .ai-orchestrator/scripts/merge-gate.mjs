@@ -50,8 +50,9 @@ try {
   const jiraToken = process.env.JIRA_CI_TOKEN;
   // One Jira client for both: it writes only the flag of a PR you merge yourself, and not in a dry run.
   const jira = jiraToken ? createJiraClient({ cloudId: mapping.cloud_id, authorization: bearerAuth(jiraToken), write: !values['dry-run'] }) : undefined;
-  const docs = jira ? { jira, passage: gatePassage(readContract(join(kit, 'contract')), mapping, gates.docs_pull_requests.gate) } : undefined;
-  const notify = { jira, mapping, space: setting('AO_JIRA_SPACE', settings) };
+  const space = setting('AO_JIRA_SPACE', settings);
+  const docs = jira ? { jira, passage: gatePassage(readContract(join(kit, 'contract')), mapping, gates.docs_pull_requests.gate), space } : undefined;
+  const notify = { jira, mapping, space };
   const { failures } = await runMergeGate({
     github: createGitHubClient({ repo, token }),
     mergeClient,

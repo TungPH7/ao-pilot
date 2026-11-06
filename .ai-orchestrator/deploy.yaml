@@ -1,0 +1,11 @@
+# How the deployer of the kit builds, runs and smoke-tests ao-pilot on the VPS (release-workflow spec 2.3, 2.9).
+# Values of the variables live on the VPS in /etc/ao/secrets/pilot/<environment>.env; the deployer adds AO_PUBLIC_URL.
+apps:
+  web:
+    dockerfile: Dockerfile
+    port: 3000
+    health: /
+    public: true
+    env: [HOST, PORT]
+smoke:
+  - { app: web, path: /, expect_status: 200, expect_text: "Giỏ hàng" }

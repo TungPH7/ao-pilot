@@ -3,7 +3,9 @@ import { request, type IncomingHttpHeaders } from 'node:http';
 
 // The acceptance criteria of DEMO-11 on the server that Playwright starts. AC9–AC11 need an Origin, a Host or a body
 // that a page in the browser cannot choose, so they send raw requests with node:http, not fetch: fetch drops a Host it
-// is given (ADR-0001). AC1–AC8 go through the page.
+// is given (ADR-0001). AC1–AC8 go through the page. AC9–AC11 carry the tag @local: their raw requests speak plain
+// HTTP without basic auth, so they always run on the local server, also when E2E_BASE_URL names an environment behind
+// Caddy (playwright.config.ts).
 
 interface Reply {
   status: number | undefined;
@@ -118,7 +120,7 @@ test.describe('DEMO-11', () => {
     await expect(page.locator('b')).toHaveCount(0);
   });
 
-  test('AC9 refuses a POST / from another origin or without an Origin with 403, without the cart page', async ({ baseURL }) => {
+  test('AC9 refuses a POST / from another origin or without an Origin with 403, without the cart page', { tag: '@local' }, async ({ baseURL }) => {
     const url = baseURL as string;
     const host = new URL(url).host;
     for (const origin of [['Origin', 'http://evil.example'], []]) {
@@ -129,7 +131,7 @@ test.describe('DEMO-11', () => {
     }
   });
 
-  test('AC10 refuses a POST / body over 1.024 bytes with 413, then still answers GET / with 200', async ({ baseURL }) => {
+  test('AC10 refuses a POST / body over 1.024 bytes with 413, then still answers GET / with 200', { tag: '@local' }, async ({ baseURL }) => {
     const url = baseURL as string;
     const own = ['Host', new URL(url).host, 'Origin', url];
     const body = 'code='.padEnd(1025, 'A');
@@ -143,7 +145,7 @@ test.describe('DEMO-11', () => {
     }
   });
 
-  test('AC11 answers GET / and POST / with 400 when the Host is not this server or is missing, without the cart page', async ({ baseURL }) => {
+  test('AC11 answers GET / and POST / with 400 when the Host is not this server or is missing, without the cart page', { tag: '@local' }, async ({ baseURL }) => {
     const url = baseURL as string;
     for (const method of ['GET', 'POST']) {
       for (const host of [['Host', 'evil.example', 'Origin', 'http://evil.example'], ['Origin', url]]) {

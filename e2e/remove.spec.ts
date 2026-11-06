@@ -5,7 +5,9 @@ import { cartServer } from '../src/server.ts';
 
 // The acceptance criteria of DEMO-20 on the server that Playwright starts, but AC4, which starts a server of its own
 // cart. AC1–AC9 go through the page, as a buyer does. AC10 and AC11 need an Origin or form fields that the page does
-// not send, so they send raw requests with node:http, not fetch: fetch drops a Host it is given (ADR-0001).
+// not send, so they send raw requests with node:http, not fetch: fetch drops a Host it is given (ADR-0001). They carry
+// the tag @local: their raw requests speak plain HTTP without basic auth, so they always run on the local server, also
+// when E2E_BASE_URL names an environment behind Caddy (playwright.config.ts).
 
 interface Reply {
   status: number | undefined;
@@ -185,7 +187,7 @@ test.describe('DEMO-20', () => {
     await expect(lines.nth(1).getByRole('cell')).toHaveText(SO_TAY);
   });
 
-  test('AC10 refuses a request to remove Bút bi from another origin or without an Origin with 403, without the cart page', async ({ baseURL }) => {
+  test('AC10 refuses a request to remove Bút bi from another origin or without an Origin with 403, without the cart page', { tag: '@local' }, async ({ baseURL }) => {
     const url = baseURL as string;
     const host = new URL(url).host;
     for (const origin of [['Origin', 'http://evil.example'], []]) {
@@ -198,7 +200,7 @@ test.describe('DEMO-20', () => {
 
   // The page of the answer is shown in Chrome, so the lines are read as a buyer sees them. toHaveText reads the
   // no-break space before ₫ as a space.
-  test('AC11 answers a request to remove an unknown line, with a name, price, quantity and total of its own, with the sample cart as it is', async ({ baseURL, page }) => {
+  test('AC11 answers a request to remove an unknown line, with a name, price, quantity and total of its own, with the sample cart as it is', { tag: '@local' }, async ({ baseURL, page }) => {
     const url = baseURL as string;
     const reply = await raw(url, {
       method: 'POST',

@@ -19,9 +19,17 @@ const HOOKS = 'do not skip or move the git hooks; fix what they report';
 const TOKEN = 'do not take or change the GitHub token of your account';
 const KEY = 'do not read the private key of a GitHub App; ao-pr.mjs uses it for you';
 const CREDENTIAL = "do not set a git credential helper: git gets your role's token from the session (dev-workflow spec 2.3)";
-// The scripts that start agents and buy their tokens (dev-workflow spec 2.3, plan decision 5).
-// Matched at the end of a word: an unquoted Windows path loses its backslashes in the shell.
-const ORCHESTRATION = /(ao-step|ao-agent|ao-git-credential)\.mjs$/;
+const IDENTITY = 'do not set, export or clear GIT_CONFIG_*, GH_TOKEN or the other variables of the session: they hold the git hooks, the credential helper of your role and the read-only token (dev-workflow spec 2.3)';
+const STDIN = 'run the commands themselves: gh-guard cannot check a shell that reads its commands from stdin';
+const ENCODED = 'run the command itself: gh-guard cannot check an encoded PowerShell command';
+// The variables lib/agents/launch.mjs sets or clears for the session, and those git and gh read in their place.
+const SESSION_NAMES = 'GIT_CONFIG\\w*|GIT_ASKPASS|SSH_ASKPASS|GIT_TERMINAL_PROMPT|GIT_EXEC_PATH|GH_TOKEN|GH_ENTERPRISE_TOKEN|GITHUB_TOKEN|GITHUB_ENTERPRISE_TOKEN|GH_CONFIG_DIR|GH_HOST|GH_PROMPT_DISABLED';
+const SESSION_VARIABLE = new RegExp(`^(?:${SESSION_NAMES})$`, 'i');
+// PowerShell reaches them through $env:, the Env: drive and [Environment]::SetEnvironmentVariable.
+const POWERSHELL_ENV = new RegExp(`(?:\\benv:[\\\\/]*|SetEnvironmentVariable\\(\\s*['"])(?:${SESSION_NAMES})\\b`, 'i');
+// The scripts that start agents and buy their tokens (dev-workflow spec 2.3, plan decision 5), in any letter case, as
+// Windows reads them. Matched at the end of a word: an unquoted Windows path loses its backslashes in the shell.
+const ORCHESTRATION = /(ao-step|ao-agent|ao-git-credential)\.mjs$/i;
 const GIT_DIR = ".git/ holds git's own settings and hooks: change them with git commands, not by editing the files";
 const KEY_FILE = /\.pem\b|ao-keys|AO_(?:DEV|REVIEW)_APP_KEY/i;
 // gh auth token prints your token, and so does gh auth status with -t, alone or in a group such as -at (after -h the
@@ -58,6 +66,7 @@ export function checkAgentCall(input, { gates, contract, projectDir, roster, tem
 function checkCommand(command, role, gates, roster, depth = 0) {
   if (TOKEN_COMMAND.test(command) || GH_HOSTS_FILE.test(command)) return deny(TOKEN);
   if (KEY_FILE.test(command)) return deny(KEY);
+  if (POWERSHELL_ENV.test(command)) return deny(IDENTITY);
   for (const words of segments(command)) {
     const result = checkWords(words, role, gates, roster, depth);
     if (!result.allow) return result;
@@ -78,17 +87,33 @@ const WRAPPERS = {
   timeout: ['-s', '--signal', '-k', '--kill-after'],
 };
 const ASSIGNMENT = /^[A-Za-z_]\w*=/;
-const programOf = (word) => word?.split(/[\\/]/).at(-1).replace(/\.exe$/i, '');
+// Windows reads program names in any letter case.
+const programOf = (word) => word?.split(/[\\/]/).at(-1).replace(/\.exe$/i, '').toLowerCase();
 const nested = (script, role, gates, roster, depth) => (depth < 5 ? checkCommand(script, role, gates, roster, depth + 1) : deny('too many nested shells'));
+// The shell builtins that set, export or clear a variable by name.
+const DECLARERS = new Set(['export', 'declare', 'typeset', 'readonly', 'local', 'unset', 'set']);
+const sessionVariable = (word) => SESSION_VARIABLE.test(word.split('=')[0]);
 
-// env: the VAR=value words before the command, which git reads too (GIT_CONFIG_*).
+// env: the VAR=value words before the command, which git reads too (GIT_CONFIG_*). A line of assignments alone changes
+// a variable the session already exports, so it counts too.
 function checkWords(words, role, gates, roster, depth, env = words.env ?? []) {
+  if (env.some(sessionVariable)) return deny(IDENTITY);
+  if (words.length === 0) return allow;
   const program = programOf(words[0]);
+  if (DECLARERS.has(program) && words.slice(1).some((word) => !word.startsWith('-') && sessionVariable(word))) return deny(IDENTITY);
   if (SHELLS.has(program)) {
     const at = words.findIndex((word, i) => i > 0 && /^-[a-z]*c[a-z]*$/.test(word));
     const script = words[at + 1] === '--' ? words[at + 2] : words[at + 1];
     if (at > 0 && script !== undefined) return nested(script, role, gates, roster, depth);
+    if (readsStdin(words)) return deny(STDIN);
   }
+  if (POWERSHELLS.has(program)) return checkPowerShell(words, role, gates, roster, depth);
+  if (program === 'cmd') {
+    const at = words.findIndex((word, i) => i > 0 && /^\/{1,2}[ck]$/i.test(word));
+    if (at > 0) return nested(words.slice(at + 1).join(' '), role, gates, roster, depth);
+    return words.slice(1).every((word) => word.startsWith('/')) ? deny(STDIN) : allow;
+  }
+  if (program.startsWith('git-credential-') || words.some((word, i) => i > 0 && programOf(word).startsWith('git-credential-'))) return deny(TOKEN);
   if (program === 'eval') return nested(words.slice(1).join(' '), role, gates, roster, depth);
   if (Object.hasOwn(WRAPPERS, program)) {
     const values = WRAPPERS[program];
@@ -103,6 +128,10 @@ function checkWords(words, role, gates, roster, depth, env = words.env ?? []) {
       // env -S splits its value into a command.
       if (program === 'env' && (word === '-S' || word === '--split-string')) return nested(words[i + 1] ?? '', role, gates, roster, depth);
       if (program === 'env' && /^-S./.test(word)) return nested(word.slice(2), role, gates, roster, depth);
+      // env -i and env - start the command with no variables, the session's included; -u takes one away.
+      if (program === 'env' && (word === '-' || word === '--ignore-environment' || /^-[A-Za-z]*i/.test(word))) return deny(IDENTITY);
+      if (program === 'env' && ['-u', '--unset'].includes(word) && sessionVariable(words[i + 1] ?? '')) return deny(IDENTITY);
+      if (program === 'env' && /^(?:-u|--unset=)./.test(word) && sessionVariable(word.replace(/^-u|^--unset=/, ''))) return deny(IDENTITY);
       if (values.includes(word)) i++;
       else if (program === 'env' && ASSIGNMENT.test(word)) assignments.push(word);
       else if (!word.startsWith('-')) break;
@@ -122,23 +151,60 @@ function checkWords(words, role, gates, roster, depth, env = words.env ?? []) {
   return programOf(words[at]) === 'git' ? checkGit(words.slice(at), gates) : checkGh(words.slice(at));
 }
 
+// sh and its kin without -c run a script file, which gh-guard does not read, like any file; with -s, or with no file,
+// they read their commands from stdin, as in `echo '…' | bash`.
+function readsStdin(words) {
+  const rest = words.slice(1);
+  if (rest.some((word) => ['--version', '--help'].includes(word))) return false;
+  return rest.some((word) => /^-[a-z]*s[a-z]*$/.test(word)) || rest.every((word) => word.startsWith('-'));
+}
+
+// powershell and pwsh: -Command, or the words after the options, is a script checked like any command line; -File runs
+// a script file; -EncodedCommand cannot be read; with no command, or -Command -, they read stdin. Options are matched by
+// any start of their name, as PowerShell takes them.
+const POWERSHELLS = new Set(['powershell', 'pwsh']);
+const PS_COMMAND = /^[-/]c(?:o(?:m(?:m(?:a(?:n(?:d)?)?)?)?)?)?$/i;
+const PS_ENCODED = /^[-/](?:e|ec|en[a-z]*)$/i;
+const PS_FILE = /^[-/]f(?:i(?:l(?:e)?)?)?$/i;
+const PS_VALUES = /^[-/](?:ex|ep|executionpolicy|w|windowstyle|config\w*|o|of|outputformat|in|if|inputformat|v|version|psconsolefile|wd|workingdirectory|settingsfile|custompipename)$/i;
+
+function checkPowerShell(words, role, gates, roster, depth) {
+  for (let i = 1; i < words.length; i++) {
+    const word = words[i];
+    if (PS_ENCODED.test(word)) return deny(ENCODED);
+    if (PS_FILE.test(word)) return allow;
+    if (PS_COMMAND.test(word)) {
+      const script = words.slice(i + 1).join(' ');
+      return script === '' || script === '-' ? deny(STDIN) : nested(script, role, gates, roster, depth);
+    }
+    if (PS_VALUES.test(word)) i++;
+    else if (!/^[-/]/.test(word)) return nested(words.slice(i).join(' '), role, gates, roster, depth);
+  }
+  return deny(STDIN);
+}
+
 // The simple commands of a command line, as lists of words, with quotes removed. The leading VAR=value words are
-// dropped from the list and kept in its `env`.
+// dropped from the list and kept in its `env`; a line of assignments alone is an empty list with its `env`.
 function segments(command) {
   const all = [];
   let words = [];
   let word = '';
   let started = false;
   let quote = null;
+  // The next word is the file of a redirection, not a word of the command.
+  let target = false;
   const endWord = () => {
-    if (started) words.push(word);
+    if (started && target) target = false;
+    else if (started) words.push(word);
     word = '';
     started = false;
   };
   const endCommand = () => {
     endWord();
+    target = false;
     const start = words.findIndex((w) => !ASSIGNMENT.test(w));
     if (start >= 0) all.push(Object.assign(words.slice(start), { env: words.slice(0, start) }));
+    else if (words.length > 0) all.push(Object.assign([], { env: words }));
     words = [];
   };
   for (let i = 0; i < command.length; i++) {
@@ -153,6 +219,20 @@ function segments(command) {
     } else if (char === '\\' && i + 1 < command.length) {
       word += command[++i];
       started = true;
+    } else if (char === '<' || char === '>') {
+      // A redirection: the digits of its file descriptor, its operator (>, >>, <, <<, <<< …) and its file are not words
+      // of the command (ba ran ao-pr.mjs 2>&1 in dev-workflow T17). >&1 and >&- copy a descriptor and take no file.
+      if (started && /^\d+$/.test(word)) {
+        word = '';
+        started = false;
+      } else endWord();
+      let j = i + 1;
+      while (command[j] === '<' || command[j] === '>') j++;
+      if (command[j] === '&') {
+        j++;
+        while (j < command.length && /[\d-]/.test(command[j])) j++;
+      } else target = true;
+      i = j - 1;
     } else if (char === '\n' || ';|&()'.includes(char)) endCommand();
     else if (/\s/.test(char)) endWord();
     else {
@@ -281,16 +361,26 @@ function apiWrites(args) {
 function checkOrchestration(words) {
   if (!words.some((word) => programOf(word) === 'node')) return undefined;
   const script = words.map((word) => word.match(ORCHESTRATION)?.[1]).find(Boolean);
-  return script ? deny(`${script}.mjs is for the human's session: an agent does not start agents or buy a token itself`) : undefined;
+  return script ? deny(`${script.toLowerCase()}.mjs is for the human's session: an agent does not start agents or buy a token itself`) : undefined;
 }
 
+// The options of node whose value is the next word, so that in node -r ./x.cjs ao-pr.mjs the script is ao-pr.mjs.
+const NODE_VALUES = new Set(['-r', '--require', '--import', '--loader', '--experimental-loader', '-C', '--conditions', '--env-file', '--input-type', '--title', '--inspect-port', '--redirect-warnings', '--diagnostic-dir', '--report-dir']);
+
 // node ao-pr.mjs <command>: each role runs only the commands of its own App (quality/gates.yaml, github_apps). The
-// script is the first word after node's options; another program that names the file, such as grep, only reads it.
+// script is the first word after node's options and their values; another program that names the file, such as grep,
+// only reads it.
 function checkAoPr(words, role, gates) {
   if (programOf(words[0]) !== 'node') return allow;
-  const at = words.findIndex((w, i) => i > 0 && !w.startsWith('-'));
-  if (at < 0 || !/(?:^|[\\/])ao-pr\.mjs$/.test(words[at])) return allow;
-  const command = words[at + 1];
+  let at = -1;
+  for (let i = 1; i < words.length && at < 0; i++) {
+    if (NODE_VALUES.has(words[i])) i++;
+    else if (!words[i].startsWith('-')) at = i;
+  }
+  if (at < 0 || !/(?:^|[\\/])ao-pr\.mjs$/i.test(words[at])) return allow;
+  // The first word after the script that is not an option; with none, ao-pr.mjs only prints its usage.
+  const command = words.slice(at + 1).find((word) => !word.startsWith('-'));
+  if (command === undefined) return allow;
   const app = Object.entries(gates.github_apps).find(([, { roles }]) => roles.includes(role));
   if (!app) return deny(`${role} has no GitHub App, so it does not work on PRs`);
   const [kind, { commands }] = app;
@@ -298,11 +388,13 @@ function checkAoPr(words, role, gates) {
 }
 
 // Outside the project an agent writes only in the temp folder: a user setting such as ~/.gitconfig could move the hooks.
-// Windows paths ignore letter case, so the globs do too.
+// Windows paths ignore letter case, so the globs do too. tempDir may list several names of the temp folder, such as the
+// short (8.3) name os.tmpdir() gives for a user name with a space and the long one.
 function checkEdit(file, role, gates, projectDir, roster, tempDir) {
   const path = relativeToProject(file, projectDir);
   if (path === null) {
-    return tempDir && relativeToProject(file, tempDir) !== null ? allow : deny(`${file} is outside the project: agents write only in the project and the temp folder`);
+    const inTemp = [tempDir].flat().some((dir) => dir && relativeToProject(file, dir) !== null);
+    return inTemp ? allow : deny(`${file} is outside the project: agents write only in the project and the temp folder`);
   }
   if (/^\.git(?:\/|$)/i.test(path)) return deny(GIT_DIR);
   const hit = gates.protected_paths.find(({ path: glob }) => matchesGlob(glob.toLowerCase(), path.toLowerCase()));

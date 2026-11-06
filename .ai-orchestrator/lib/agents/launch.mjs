@@ -11,8 +11,13 @@ const UNATTENDED = 'You run unattended (claude -p): nobody answers questions in 
 export const READ_PERMISSIONS = { contents: 'read', pull_requests: 'read', actions: 'read', checks: 'read' };
 
 // Variables of your environment that would give git or gh another way in: settings passed by `git -c`, a program that
-// asks for a password, and the tokens gh reads after GH_TOKEN.
-export const CLEARED_ENV = ['GIT_CONFIG_PARAMETERS', 'GIT_ASKPASS', 'SSH_ASKPASS', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN'];
+// asks for a password, and the tokens gh reads after GH_TOKEN. Also your own secrets: Windows gives every process your
+// user variables, and the CI token, your admin token, the read-only Jira token of the deployer and the basic auth of the
+// environments stay in your session (release-workflow spec 2.5, T13); qa gets the basic auth as its own two variables.
+export const CLEARED_ENV = [
+  'GIT_CONFIG_PARAMETERS', 'GIT_ASKPASS', 'SSH_ASKPASS', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN', 'GITHUB_ENTERPRISE_TOKEN',
+  'JIRA_CI_TOKEN', 'JIRA_ADMIN_TOKEN', 'AO_JIRA_READ_TOKEN', 'AO_ENV_AUTH',
+];
 
 // The command git runs for a credential, before the role and the repository. git runs it through the shell, so the
 // folder is quoted, and a folder the shell would still read inside the quotes is refused.
@@ -50,8 +55,9 @@ export function launchPlan({ role, roster, args, skills, projectDir, identity })
 
 // gh reads with the token in GH_TOKEN. For credentials git reads only the settings below: the empty credential.helper
 // drops every helper set before it, such as Git Credential Manager, and the next one is the kit's helper with the role
-// and the repository in its value, where an agent cannot change them (gh-guard refuses GIT_CONFIG_* and -c
-// credential.*). The helper decides what each role gets (lib/agents/git-credential.mjs).
+// and the repository in its value. gh-guard refuses the commands that change them (GIT_CONFIG_*, -c credential.*), which
+// stops a mistake, not an agent set on getting round it: the session runs as your Windows user and can read the App
+// keys (docs/quality-gates.md). The helper decides what each role gets (lib/agents/git-credential.mjs).
 function agentEnv(role, identity) {
   if (!identity?.readToken || !identity.helper || !identity.bot) throw new Error('an agent session needs the GitHub App identity: the read-only token, the credential helper and the bot');
   if (!/^[\w.-]+\/[\w.-]+$/.test(identity.repo ?? '')) throw new Error(`the repository must be owner/name, not ${identity.repo}`);

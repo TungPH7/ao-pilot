@@ -1,9 +1,12 @@
 import { test, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import { request, type IncomingHttpHeaders } from 'node:http';
-import { connect, type AddressInfo } from 'node:net';
+import { connect, createServer as createNetServer, type AddressInfo } from 'node:net';
+import { fileURLToPath } from 'node:url';
 import type { CartItem } from './page.ts';
-import { cartServer, SAMPLE_CART } from './server.ts';
+import { cartServer, publicSite, SAMPLE_CART, serveOptions, stopOnSignals, type PublicSite } from './server.ts';
 
 const POLICY = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 
@@ -11,10 +14,10 @@ const POLICY = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; 
 // instead of hanging it (review of PR #9).
 const TIMEOUT = 5000;
 
-// Starts the server of items, or of the sample cart, on a free port of 127.0.0.1 and stops it after the test, dropping
-// the connections still open.
-async function start(t: TestContext, items?: CartItem[]) {
-  const server = cartServer(items);
+// Starts the server of items, or of the sample cart, with the public site if one is given, on a free port of 127.0.0.1
+// and stops it after the test, dropping the connections still open.
+async function start(t: TestContext, items?: CartItem[], site?: PublicSite) {
+  const server = cartServer(items, site);
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => {
     server.closeAllConnections();
@@ -249,6 +252,191 @@ test('a POST / from the page of this server, by either of its names, is answered
     assert.equal(reply.status, 200, headers.join(' '));
     assert.match(reply.body, /<h1>Giỏ hàng<\/h1>/);
   }
+});
+
+// ADR-0003: behind Caddy, the server gets the public Host of its environment as is, and the page loaded from it posts
+// with the public Origin. AO_PUBLIC_URL names that site; without it, nothing changes.
+const PUBLIC_URL = 'https://pilot-dev.ao.t2g.io.vn';
+const PUBLIC_HOST = 'pilot-dev.ao.t2g.io.vn';
+
+test('the public site of AO_PUBLIC_URL is its host and its origin, with or without a trailing slash or a port', () => {
+  assert.deepEqual(publicSite(PUBLIC_URL), { host: PUBLIC_HOST, origin: PUBLIC_URL });
+  assert.deepEqual(publicSite(`${PUBLIC_URL}/`), { host: PUBLIC_HOST, origin: PUBLIC_URL });
+  assert.deepEqual(publicSite('https://PILOT-DEV.ao.t2g.io.vn:443'), { host: PUBLIC_HOST, origin: PUBLIC_URL });
+  assert.deepEqual(publicSite('http://pilot.example:8080'), { host: 'pilot.example:8080', origin: 'http://pilot.example:8080' });
+});
+
+test('an AO_PUBLIC_URL that is not an http or https origin stops the server from being made', () => {
+  for (const url of ['', 'pilot-dev.ao.t2g.io.vn', 'ftp://pilot.example', `${PUBLIC_URL}/cart`, `${PUBLIC_URL}/?x=1`, `${PUBLIC_URL}/#top`, 'https://user:pass@pilot.example']) {
+    assert.throws(() => publicSite(url), RangeError, url);
+  }
+});
+
+test('the error of a wrong AO_PUBLIC_URL says what is wrong without quoting the value', () => {
+  const reasons: [string, RegExp][] = [
+    ['not a url s3cret', /is not a URL/],
+    ['ftp://s3cret.example', /must start with http:\/\/ or https:\/\//],
+    ['https://user:s3cret@pilot.example', /must not hold a user or a password/],
+    ['https://pilot.example/s3cret', /no path, query or fragment/],
+    ['https://pilot.example/?s3cret', /no path, query or fragment/],
+  ];
+  for (const [url, reason] of reasons) {
+    assert.throws(
+      () => publicSite(url),
+      (error: unknown) => error instanceof RangeError && reason.test(error.message) && !error.message.includes('s3cret'),
+      url,
+    );
+  }
+});
+
+// What npm run serve reads at start: HOST, PORT and AO_PUBLIC_URL.
+test('npm run serve listens on 127.0.0.1:3000 by default, with no public site', () => {
+  assert.deepEqual(serveOptions({}), { host: '127.0.0.1', port: 3000, site: undefined });
+  assert.deepEqual(serveOptions({ HOST: '', AO_PUBLIC_URL: '' }), { host: '127.0.0.1', port: 3000, site: undefined });
+});
+
+test('npm run serve listens on HOST and PORT, and accepts the public site of AO_PUBLIC_URL, when they are set', () => {
+  assert.deepEqual(serveOptions({ HOST: '0.0.0.0' }), { host: '0.0.0.0', port: 3000, site: undefined });
+  assert.deepEqual(serveOptions({ HOST: '0.0.0.0', PORT: '3100', AO_PUBLIC_URL: `${PUBLIC_URL}/` }), {
+    host: '0.0.0.0',
+    port: 3100,
+    site: { host: PUBLIC_HOST, origin: PUBLIC_URL },
+  });
+});
+
+test('npm run serve with an AO_PUBLIC_URL that is not an http or https origin throws a RangeError', () => {
+  for (const url of ['pilot-dev.ao.t2g.io.vn', 'ftp://pilot.example', `${PUBLIC_URL}/cart`, 'https://user:s3cret@pilot.example']) {
+    assert.throws(() => serveOptions({ HOST: '0.0.0.0', AO_PUBLIC_URL: url }), RangeError, url);
+  }
+});
+
+test('node src/server.ts with a wrong AO_PUBLIC_URL exits with 1 and prints the reason, not the value', { timeout: TIMEOUT }, async () => {
+  const env = { ...process.env, HOST: '127.0.0.1', PORT: '0', AO_PUBLIC_URL: 'https://user:s3cret@pilot.example' };
+  const { code, stdout, stderr } = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve) => {
+    const child = execFile(process.execPath, [fileURLToPath(new URL('./server.ts', import.meta.url))], { env, timeout: TIMEOUT }, (_error, out, err) =>
+      resolve({ code: child.exitCode, stdout: out, stderr: err }),
+    );
+  });
+  assert.equal(code, 1);
+  assert.equal(stdout, '');
+  assert.match(stderr, /AO_PUBLIC_URL must not hold a user or a password/);
+  assert.doesNotMatch(stderr, /s3cret/);
+});
+
+// On SIGTERM (docker stop) or SIGINT (Ctrl+C) the server closes and the process exits at once.
+test('on SIGTERM or SIGINT the server stops, even with an idle connection open, and the process exits with 0', { timeout: TIMEOUT }, async (t) => {
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+    const server = cartServer();
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    // A server that stopOnSignals() did not close must not keep the test file running.
+    t.after(() => {
+      server.closeAllConnections();
+      if (server.listening) server.close();
+    });
+    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const events = new EventEmitter();
+    const codes: number[] = [];
+    const exited = new Promise<void>((resolve) => {
+      stopOnSignals(server, {
+        once: (name, listener) => events.once(name, listener),
+        exit: (code) => {
+          codes.push(code);
+          resolve();
+        },
+      });
+    });
+    // fetch keeps its connection open after the answer, as a browser does.
+    assert.equal((await send(`${url}/`)).status, 200);
+    events.emit(signal);
+    await exited;
+    // A second signal while stopping, or after, does not exit again.
+    events.emit(signal === 'SIGTERM' ? 'SIGINT' : 'SIGTERM');
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(codes, [0], signal);
+    assert.equal(server.listening, false, signal);
+  }
+});
+
+test('with AO_PUBLIC_URL, a GET and a POST / from the public site are answered with the page', async (t) => {
+  const url = await start(t, undefined, publicSite(PUBLIC_URL));
+  const page = await raw(url, { headers: ['Host', PUBLIC_HOST] });
+  assert.equal(page.status, 200);
+  assert.match(page.body, /<h1>Giỏ hàng<\/h1>/);
+  const posted = await raw(url, { method: 'POST', headers: ['Host', PUBLIC_HOST, 'Origin', PUBLIC_URL], body: 'code=GIAM10' });
+  assert.equal(posted.status, 200);
+  assert.match(posted.body, /data-testid="discount"/);
+});
+
+test('with AO_PUBLIC_URL, the names of this machine still work as before', async (t) => {
+  const url = await start(t, undefined, publicSite(PUBLIC_URL));
+  const local = `localhost:${new URL(url).port}`;
+  for (const headers of [own(url), ['Host', local, 'Origin', `http://${local}`]]) {
+    const reply = await raw(url, { method: 'POST', headers, body: 'code=' });
+    assert.equal(reply.status, 200, headers.join(' '));
+  }
+});
+
+test('with AO_PUBLIC_URL, another Host is still 400, for GET and POST', async (t) => {
+  const url = await start(t, undefined, publicSite(PUBLIC_URL));
+  for (const host of ['evil.example', `${PUBLIC_HOST}:443`, `${PUBLIC_HOST}.evil.example`, 'PILOT-DEV.ao.t2g.io.vn', `evil.${PUBLIC_HOST}`]) {
+    for (const method of ['GET', 'POST']) {
+      const reply = await raw(url, { method, headers: ['Host', host, 'Origin', PUBLIC_URL], body: method === 'POST' ? 'code=GIAM10' : undefined });
+      assert.equal(reply.status, 400, `${method} with Host ${host}`);
+      assert.equal(reply.body, 'Bad request');
+    }
+  }
+  const twice = await raw(url, { headers: ['Host', PUBLIC_HOST, 'Host', PUBLIC_HOST] });
+  assert.equal(twice.status, 400);
+});
+
+test('with AO_PUBLIC_URL, a POST / to the public Host from another origin, or without one, is still 403', async (t) => {
+  const url = await start(t, undefined, publicSite(PUBLIC_URL));
+  const origins = [
+    ['Origin', 'http://evil.example'],
+    [],
+    ['Origin', 'null'],
+    ['Origin', `http://${PUBLIC_HOST}`],
+    ['Origin', `${PUBLIC_URL}/`],
+    ['Origin', url],
+    ['Origin', PUBLIC_URL, 'Origin', 'http://evil.example'],
+  ];
+  for (const origin of origins) {
+    const reply = await raw(url, { method: 'POST', headers: ['Host', PUBLIC_HOST, ...origin], body: 'code=GIAM10' });
+    assert.equal(reply.status, 403, origin.join(' '));
+    assert.equal(reply.body, 'Forbidden');
+  }
+  // The public Origin goes only with the public Host, not with a name of this machine.
+  const crossed = await raw(url, { method: 'POST', headers: ['Host', new URL(url).host, 'Origin', PUBLIC_URL], body: 'code=GIAM10' });
+  assert.equal(crossed.status, 403);
+});
+
+// A public site whose host is a name of this machine, such as https://localhost:<port>: that Host still takes only the
+// Origin http://<Host>, as without a public site.
+test('with an AO_PUBLIC_URL on a name of this machine, that Host still takes only the Origin http://<Host>', async (t) => {
+  const probe = createNetServer();
+  await new Promise<void>((resolve) => probe.listen(0, '127.0.0.1', resolve));
+  const { port } = probe.address() as AddressInfo;
+  await new Promise<void>((resolve) => probe.close(() => resolve()));
+  const server = cartServer(SAMPLE_CART, publicSite(`https://localhost:${port}`));
+  await new Promise<void>((resolve) => server.listen(port, '127.0.0.1', resolve));
+  t.after(() => {
+    server.closeAllConnections();
+    server.close();
+  });
+  const url = `http://127.0.0.1:${port}`;
+  const local = `localhost:${port}`;
+  const plain = await raw(url, { method: 'POST', headers: ['Host', local, 'Origin', `http://${local}`], body: 'code=' });
+  assert.equal(plain.status, 200);
+  const secure = await raw(url, { method: 'POST', headers: ['Host', local, 'Origin', `https://${local}`], body: 'code=' });
+  assert.equal(secure.status, 403);
+});
+
+test('without AO_PUBLIC_URL, the public Host is 400 and the public Origin 403', async (t) => {
+  const url = await start(t);
+  const page = await raw(url, { headers: ['Host', PUBLIC_HOST] });
+  assert.equal(page.status, 400);
+  const posted = await raw(url, { method: 'POST', headers: ['Host', new URL(url).host, 'Origin', PUBLIC_URL], body: 'code=GIAM10' });
+  assert.equal(posted.status, 403);
 });
 
 // AC10: a coupon is a few dozen bytes, so a body over 1.024 bytes is refused, and the connection is closed rather than
