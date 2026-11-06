@@ -15,8 +15,10 @@ Role: <reviewer | security>
 Scope: changes since <short SHA of the commit of that report>
 Every other review covers the whole PR and has no Scope line. When the prompt lists Critical or High findings still
 open, such a review also adds, after Findings, a section "## Earlier findings": a table with the columns
-| Severity | Where | Finding | Status |, one row per finding listed, Status beginning with Fixed or Open. merge-gate
-counts a listed finding that is Open, and one left out, as still open. -->
+| Severity | Where | Finding | Status |, one row per finding listed, with Severity, Where and Finding copied from the prompt, and Status Open, or Fixed
+alone or with a colon and how. merge-gate knows a finding by its Where and Finding, and counts one listed as Open,
+one left out, and one fixed only in part as still open. A Scope line that does not read as above makes the report
+unreadable, and an unreadable report clears nothing. -->
 
 ## Context
 

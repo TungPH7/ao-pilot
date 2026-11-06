@@ -28,6 +28,7 @@ import { createGitHubClient, readGitHubToken } from '../lib/tracker/github-clien
 import { bearerAuth, createJiraClient } from '../lib/tracker/jira-client.mjs';
 import { readMapping } from '../lib/tracker/mapping.mjs';
 import { startAgentProcess, killTree } from '../lib/workflow/agent-process.mjs';
+import { withLoggedSession } from '../lib/workflow/runs.mjs';
 import { gatherFacts, readRunning } from '../lib/workflow/facts.mjs';
 import { basicAuthEnv, qaFollowUp } from '../lib/workflow/qa.mjs';
 import { releaseCutChanges } from '../lib/release/release-cut.mjs';
@@ -154,8 +155,8 @@ async function main() {
   const github = createGitHubClient({ repo, token });
   const files = {
     ledger: (key) => existsSync(join(projectDir, '.ai', 'ledger', `${key}.md`)),
-    runState: (key) => readJson(join(runsDir, key, 'state.json')),
-    runStates: () => (existsSync(runsDir) ? readdirSync(runsDir).map((key) => readJson(join(runsDir, key, 'state.json'))).filter(Boolean) : []),
+    runState: readRunState,
+    runStates: () => (existsSync(runsDir) ? readdirSync(runsDir).map(readRunState).filter(Boolean) : []),
     // The docs branch of an Epic on this checkout, where stage spec commits before it pushes.
     branch: (name) => git('rev-parse', '--verify', '--quiet', `refs/heads/${name}`).status === 0,
     file: (branch, path) => {
@@ -207,7 +208,7 @@ async function main() {
       pack: reviewPackWriter({ github, jira }),
       worktree: { add: addWorktree, remove: removeWorktree },
       store: {
-        readState: (k) => readJson(join(runsDir, k, 'state.json')),
+        readState: readRunState,
         writeState: (k, state) => writeFileSync(join(runsDir, k, 'state.json'), `${JSON.stringify(state, null, 2)}\n`),
         writeLast: (k, text) => writeFileSync(join(runsDir, k, 'last.md'), text),
       },
@@ -224,6 +225,12 @@ async function main() {
   } finally {
     rmSync(lock, { force: true });
   }
+}
+
+// state.json of a run folder; a run killed with its shell gets its session from its log.
+function readRunState(key) {
+  const log = (name) => (existsSync(join(runsDir, key, name)) ? readFileSync(join(runsDir, key, name), 'utf8').split('\n') : []);
+  return withLoggedSession(readJson(join(runsDir, key, 'state.json')), log);
 }
 
 function readJson(file) {
@@ -468,7 +475,11 @@ async function releasePr({ version, branch, regression }, { repo, settings }) {
   const beyond = [...new Set(changed.filter((file) => !allowed.includes(file)))];
   if (beyond.length > 0) throw new Error(`${branch} changed ${beyond.join(', ')} since the regression on ${regression.slice(0, 8)}: run /ao-ship ${version} again, and the regression runs again`);
   const open = (await github.getAll('/pulls', { state: 'open', base: 'main' })).find((pr) => pr.head.ref === branch);
-  if (open) notes.push(`PR #${open.number} of ${branch} into main is open already.`);
+  // The notes may have been written again (T21): the description follows them.
+  if (open) {
+    if (open.body !== body) await github.request('PATCH', `/pulls/${open.number}`, undefined, { body });
+    notes.push(`PR #${open.number} of ${branch} into main is open already${open.body !== body ? '; its description now holds the new notes' : ''}.`);
+  }
   else {
     const pr = await github.request('POST', '/pulls', undefined, { title: `release: ${version}`, head: branch, base: 'main', body });
     notes.push(`Opened PR #${pr.number} of ${branch} into main.`);

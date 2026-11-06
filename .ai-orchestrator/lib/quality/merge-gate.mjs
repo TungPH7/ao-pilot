@@ -306,7 +306,7 @@ function baseConditions({ pr, checks }) {
 
 // Each role of the review App needs a report posted by that App on the head commit; the latest one of each role must
 // be readable and leave no Critical or High finding open. A security report of the new part counts with the reports
-// before it, whatever their commit: the earlier findings it does not list as Fixed stay open (openCounts).
+// before it, whatever their commit: the earlier findings it does not list as Fixed stay open (openFindings).
 function reportGaps(reviews, head, at, roles, bot) {
   const reports = reviews.filter((r) => r.user?.login === bot).map((r) => ({ ...readReviewReport(r.body, roles), sha: r.commit_id }));
   return roles.flatMap((role) => {

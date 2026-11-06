@@ -33,7 +33,7 @@ Object.assign(PURPOSES, {
   'review-delta': ({ pr, since, at, earlier = [] }) => [
     `Review PR #${pr}, only the changes since ${since.slice(0, 7)}; your full report on ${since.slice(0, 7)} is the review of ${day(at)}. Write the line Scope: changes since ${since.slice(0, 7)} in your report.`,
     ...(earlier.length > 0 ? [
-      `The security reports before this one left ${earlier.length} Critical or High finding${earlier.length === 1 ? '' : 's'} open. Check each against the head, and list every one in a section "## Earlier findings" after Findings, as a table with the columns Severity | Where | Finding | Status, where Status begins with Fixed or Open. merge-gate counts a finding you do not list as open.`,
+      `The security reports before this one left ${earlier.length} Critical or High finding${earlier.length === 1 ? '' : 's'} open. Check each against the head, and list every one in a section "## Earlier findings" after Findings, as a table with the columns Severity | Where | Finding | Status. Copy Severity, Where and Finding as they stand below: merge-gate knows a finding by its Where and Finding. Status is Open, or Fixed, alone or with a colon and how; a finding fixed only in part is Open. merge-gate counts a finding you do not list as open.`,
       earlier.map(({ severity, where, finding }) => `- ${[severity, where, finding].map((text) => String(text ?? '').replace(/\s+/g, ' ').replaceAll('|', '/').trim()).join(' | ')}`).join('\n'),
     ] : []),
   ].join('\n\n'),
