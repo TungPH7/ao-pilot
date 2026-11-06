@@ -19,7 +19,7 @@
 
 ### Fixed
 
-Không có.
+- Job `policy` của CI chặn PR release vào `main` và PR merge ngược về `develop`: bản chép kit nay chỉ kiểm tiêu đề của hai loại PR này (`release: vX.Y.Z`, `Merge main into <base> after vX.Y.Z`). Cùng bản cập nhật kit, deployer mở quyền đọc cho thư mục build và báo lỗi rõ khi container mới không có địa chỉ (DEMO-27).
 
 ### Known Issues
 
