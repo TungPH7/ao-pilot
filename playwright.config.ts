@@ -7,8 +7,14 @@ import { defineConfig, type Project } from '@playwright/test';
 // - local: the tests tagged @local, on the server started here. They send raw requests (a foreign Host or Origin, an
 //   oversized body) that a browser cannot send and that Caddy, with HTTPS and basic auth, would not pass on as they are.
 // - environment: every other test, on E2E_BASE_URL, with basic auth from E2E_HTTP_USER and E2E_HTTP_PASSWORD when both
-//   are set. AC4 of e2e/remove.spec.ts starts a server of its own and goes to it, wherever the project points.
+//   are set. Chrome sends that basic auth to the origin of E2E_BASE_URL only, not to any other site a test reaches.
+//   AC4 of e2e/remove.spec.ts starts a server of its own and goes to it, wherever the project points.
 // Without E2E_BASE_URL every test runs on the server started here, as before.
+//
+// A failed test keeps its trace (trace: 'retain-on-failure'). Playwright writes the context options into the trace,
+// httpCredentials with the password in clear, so the trace of an environment test holds the basic auth of Development
+// or Staging. The kit keeps those traces off Jira: behind basic auth, ao-step keeps them on this machine and does not
+// attach them to the item (.ai-orchestrator/lib/workflow/qa.mjs). Do not upload test-results/ anywhere else either.
 const PORT = 3100;
 const LOCAL_URL = `http://127.0.0.1:${PORT}`;
 const BASE_URL = process.env.E2E_BASE_URL || undefined;
@@ -25,7 +31,7 @@ const projects: Project[] =
           grepInvert: /@local/,
           use: {
             baseURL: BASE_URL,
-            ...(USER && PASSWORD ? { httpCredentials: { username: USER, password: PASSWORD } } : {}),
+            ...(USER && PASSWORD ? { httpCredentials: { username: USER, password: PASSWORD, origin: new URL(BASE_URL).origin } } : {}),
           },
         },
       ];
