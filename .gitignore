@@ -3,3 +3,7 @@
 node_modules/
 coverage/
 dist/
+.ai/
+test-results/
+playwright-report/
+.playwright-cli/

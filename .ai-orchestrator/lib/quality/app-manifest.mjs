@@ -1,5 +1,9 @@
-// The two GitHub Apps of the agents (quality-gates spec section 2.2) as manifests for GitHub's manifest flow, and the
-// local page that sends them to GitHub. Pure: scripts/github-app-create.mjs serves the page and talks to GitHub.
+// The GitHub Apps of the kit as manifests for GitHub's manifest flow, and the local page that sends them to GitHub.
+// Pure: scripts/github-app-create.mjs serves the page and talks to GitHub. The two Apps of the agents come from
+// quality-gates spec section 2.2; Workflows, Actions and checks from dev-workflow spec 2.3: devops pushes workflow files
+// with ao-dev, and every role reads CI with a read-only ao-review token. Each token asks only for the part of these it
+// needs. ao-deploy is the deployer's App on the VPS (release-workflow spec 2.3): it reads what audit reads, commit
+// statuses included (T1), and writes only deployments; its key lives only on the VPS.
 
 export const HOMEPAGE = 'https://github.com/TungPH7/ai-orchestrator-v1';
 
@@ -7,12 +11,17 @@ export const APPS = {
   dev: {
     suffix: 'ao-dev',
     description: 'Opens and merges pull requests for the ai-orchestrator agents.',
-    permissions: { contents: 'write', pull_requests: 'write' },
+    permissions: { contents: 'write', pull_requests: 'write', workflows: 'write', actions: 'read', checks: 'read' },
   },
   review: {
     suffix: 'ao-review',
     description: 'Posts review reports for the ai-orchestrator agents.',
-    permissions: { contents: 'read', pull_requests: 'write' },
+    permissions: { contents: 'read', pull_requests: 'write', actions: 'read', checks: 'read' },
+  },
+  deploy: {
+    suffix: 'ao-deploy',
+    description: 'Deploys the commits that passed the ai-orchestrator gates, from the VPS.',
+    permissions: { contents: 'read', pull_requests: 'read', checks: 'read', statuses: 'read', actions: 'read', deployments: 'write' },
   },
 };
 
@@ -70,7 +79,7 @@ export function registrationPage({ owner, repo, state, apps, ids }) {
 <ol>
 ${rows.join('\n')}
 </ol>
-${done ? '<p><b>Xong cả hai App.</b> Bạn có thể đóng trang này.</p>' : ''}
+${done ? '<p><b>Xong mọi App.</b> Bạn có thể đóng trang này.</p>' : ''}
 </body></html>
 `;
 }

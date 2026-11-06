@@ -11,12 +11,14 @@ on:
     types: [completed]
   workflow_dispatch:
 
-# The workflow token only reads, check runs included; merges use the App token.
+# The workflow token only reads, check runs included; merges use the App token. actions: read dates the CI run of a
+# docs PR's head (dev-workflow spec 2.4).
 permissions:
   contents: read
   pull-requests: read
   checks: read
   statuses: read
+  actions: read
 
 # One run at a time; a run waiting behind it sees everything a skipped one would have.
 concurrency:
@@ -42,4 +44,6 @@ jobs:
       - run: node .ai-orchestrator/scripts/merge-gate.mjs
         env:
           AO_DEV_APP_KEY: ${{ secrets.AO_DEV_APP_KEY }}
+          # Reads the Epic of a docs PR, and flags the item of a PR you merge yourself.
+          JIRA_CI_TOKEN: ${{ secrets.JIRA_CI_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}

@@ -7,20 +7,13 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { runAoPr } from '../lib/quality/ao-pr.mjs';
 import { readGates } from '../lib/quality/gates.mjs';
-import { appCredentials, installationToken } from '../lib/quality/github-app.mjs';
+import { appCredentials, githubRepoOf, installationToken } from '../lib/quality/github-app.mjs';
 import { createGitHubClient } from '../lib/tracker/github-client.mjs';
 
 const git = (...args) => spawnSync('git', args, { encoding: 'utf8' }).stdout?.trim() ?? '';
 
-function originRepo() {
-  const url = git('remote', 'get-url', 'origin');
-  const repo = url.match(/github\.com[:/]([^/\s]+\/[^/\s]+?)(?:\.git)?$/)?.[1];
-  if (!repo) throw new Error(`the origin remote is not a GitHub repository: ${url || 'none'}`);
-  return repo;
-}
-
 async function clientFor(kind) {
-  const repo = originRepo();
+  const repo = githubRepoOf(git('remote', 'get-url', 'origin'));
   const { appId, privateKey } = appCredentials(kind);
   const { token } = await installationToken({ appId, privateKey, repo });
   return createGitHubClient({ repo, token, write: true });

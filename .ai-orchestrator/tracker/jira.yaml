@@ -4,7 +4,9 @@
 site: phunghuutung12b4.atlassian.net
 cloud_id: 58b36210-6e4d-421a-adf4-e74a4e23b069
 
-# Each contract role belongs to exactly one identity (rule J4); the group is what the Restrict rules name.
+# Each contract role belongs to exactly one identity (rule J4); the group is what the Restrict rules name. account_id is
+# the Atlassian account id, not a secret (it is in the URL of the profile): merge-gate and jira-sync count only the
+# comments of the automation account as the kit's.
 identities:
   - id: human
     kind: user
@@ -15,6 +17,7 @@ identities:
   - id: agents
     kind: service-account
     account: orchestratoragent
+    account_id: "712020:3c1a9503-577b-49c6-a70e-033f740c1f31"
     group: ao-agents
     roles: [pm, ba, ux, sa, fe-dev, be-dev, reviewer, security, qa, devops]
     token_env: ATLASSIAN_AGENT_TOKEN
@@ -23,6 +26,7 @@ identities:
   - id: automation
     kind: service-account
     account: orchestratorci
+    account_id: "712020:14a4a21d-167e-4ee7-87cb-386edf298b62"
     group: ao-automation
     roles: [automation]
     token_env: JIRA_CI_TOKEN
@@ -101,6 +105,12 @@ fields:
 
 # flag-needs-you sets Flagged, adds this label and comments the reason (spec 2.3).
 needs_you_label: needs-you
+
+# Labels ba puts on an item it creates (dev-workflow spec 2.5): the dev agent that builds it, such as ao-fe-dev, and the
+# effort of a hard item, such as ao-effort-xhigh, which you approve with the plan. /ao-build reads them.
+work_labels:
+  role_prefix: ao-
+  effort_prefix: ao-effort-
 
 # One Kanban board per space. Columns follow the board_column of the contract states; the first is the Kanban backlog.
 # `{key}` is the space key. Cancelled items have no column, so they leave the board.
