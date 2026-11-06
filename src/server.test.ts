@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { request, type IncomingHttpHeaders } from 'node:http';
 import { connect, type AddressInfo } from 'node:net';
 import type { CartItem } from './page.ts';
-import { cartServer, SAMPLE_CART } from './server.ts';
+import { cartServer, publicSite, SAMPLE_CART, type PublicSite } from './server.ts';
 
 const POLICY = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 
@@ -11,10 +11,10 @@ const POLICY = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; 
 // instead of hanging it (review of PR #9).
 const TIMEOUT = 5000;
 
-// Starts the server of items, or of the sample cart, on a free port of 127.0.0.1 and stops it after the test, dropping
-// the connections still open.
-async function start(t: TestContext, items?: CartItem[]) {
-  const server = cartServer(items);
+// Starts the server of items, or of the sample cart, with the public site if one is given, on a free port of 127.0.0.1
+// and stops it after the test, dropping the connections still open.
+async function start(t: TestContext, items?: CartItem[], site?: PublicSite) {
+  const server = cartServer(items, site);
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => {
     server.closeAllConnections();
@@ -249,6 +249,85 @@ test('a POST / from the page of this server, by either of its names, is answered
     assert.equal(reply.status, 200, headers.join(' '));
     assert.match(reply.body, /<h1>Giỏ hàng<\/h1>/);
   }
+});
+
+// ADR-0003: behind Caddy, the server gets the public Host of its environment as is, and the page loaded from it posts
+// with the public Origin. AO_PUBLIC_URL names that site; without it, nothing changes.
+const PUBLIC_URL = 'https://pilot-dev.ao.t2g.io.vn';
+const PUBLIC_HOST = 'pilot-dev.ao.t2g.io.vn';
+
+test('the public site of AO_PUBLIC_URL is its host and its origin, with or without a trailing slash or a port', () => {
+  assert.deepEqual(publicSite(PUBLIC_URL), { host: PUBLIC_HOST, origin: PUBLIC_URL });
+  assert.deepEqual(publicSite(`${PUBLIC_URL}/`), { host: PUBLIC_HOST, origin: PUBLIC_URL });
+  assert.deepEqual(publicSite('https://PILOT-DEV.ao.t2g.io.vn:443'), { host: PUBLIC_HOST, origin: PUBLIC_URL });
+  assert.deepEqual(publicSite('http://pilot.example:8080'), { host: 'pilot.example:8080', origin: 'http://pilot.example:8080' });
+});
+
+test('an AO_PUBLIC_URL that is not an http or https origin stops the server from being made', () => {
+  for (const url of ['', 'pilot-dev.ao.t2g.io.vn', 'ftp://pilot.example', `${PUBLIC_URL}/cart`, `${PUBLIC_URL}/?x=1`, `${PUBLIC_URL}/#top`, 'https://user:pass@pilot.example']) {
+    assert.throws(() => publicSite(url), RangeError, url);
+  }
+});
+
+test('with AO_PUBLIC_URL, a GET and a POST / from the public site are answered with the page', async (t) => {
+  const url = await start(t, undefined, publicSite(PUBLIC_URL));
+  const page = await raw(url, { headers: ['Host', PUBLIC_HOST] });
+  assert.equal(page.status, 200);
+  assert.match(page.body, /<h1>Giỏ hàng<\/h1>/);
+  const posted = await raw(url, { method: 'POST', headers: ['Host', PUBLIC_HOST, 'Origin', PUBLIC_URL], body: 'code=GIAM10' });
+  assert.equal(posted.status, 200);
+  assert.match(posted.body, /data-testid="discount"/);
+});
+
+test('with AO_PUBLIC_URL, the names of this machine still work as before', async (t) => {
+  const url = await start(t, undefined, publicSite(PUBLIC_URL));
+  const local = `localhost:${new URL(url).port}`;
+  for (const headers of [own(url), ['Host', local, 'Origin', `http://${local}`]]) {
+    const reply = await raw(url, { method: 'POST', headers, body: 'code=' });
+    assert.equal(reply.status, 200, headers.join(' '));
+  }
+});
+
+test('with AO_PUBLIC_URL, another Host is still 400, for GET and POST', async (t) => {
+  const url = await start(t, undefined, publicSite(PUBLIC_URL));
+  for (const host of ['evil.example', `${PUBLIC_HOST}:443`, `${PUBLIC_HOST}.evil.example`, 'PILOT-DEV.ao.t2g.io.vn', `evil.${PUBLIC_HOST}`]) {
+    for (const method of ['GET', 'POST']) {
+      const reply = await raw(url, { method, headers: ['Host', host, 'Origin', PUBLIC_URL], body: method === 'POST' ? 'code=GIAM10' : undefined });
+      assert.equal(reply.status, 400, `${method} with Host ${host}`);
+      assert.equal(reply.body, 'Bad request');
+    }
+  }
+  const twice = await raw(url, { headers: ['Host', PUBLIC_HOST, 'Host', PUBLIC_HOST] });
+  assert.equal(twice.status, 400);
+});
+
+test('with AO_PUBLIC_URL, a POST / to the public Host from another origin, or without one, is still 403', async (t) => {
+  const url = await start(t, undefined, publicSite(PUBLIC_URL));
+  const origins = [
+    ['Origin', 'http://evil.example'],
+    [],
+    ['Origin', 'null'],
+    ['Origin', `http://${PUBLIC_HOST}`],
+    ['Origin', `${PUBLIC_URL}/`],
+    ['Origin', url],
+    ['Origin', PUBLIC_URL, 'Origin', 'http://evil.example'],
+  ];
+  for (const origin of origins) {
+    const reply = await raw(url, { method: 'POST', headers: ['Host', PUBLIC_HOST, ...origin], body: 'code=GIAM10' });
+    assert.equal(reply.status, 403, origin.join(' '));
+    assert.equal(reply.body, 'Forbidden');
+  }
+  // The public Origin goes only with the public Host, not with a name of this machine.
+  const crossed = await raw(url, { method: 'POST', headers: ['Host', new URL(url).host, 'Origin', PUBLIC_URL], body: 'code=GIAM10' });
+  assert.equal(crossed.status, 403);
+});
+
+test('without AO_PUBLIC_URL, the public Host is 400 and the public Origin 403', async (t) => {
+  const url = await start(t);
+  const page = await raw(url, { headers: ['Host', PUBLIC_HOST] });
+  assert.equal(page.status, 400);
+  const posted = await raw(url, { method: 'POST', headers: ['Host', new URL(url).host, 'Origin', PUBLIC_URL], body: 'code=GIAM10' });
+  assert.equal(posted.status, 403);
 });
 
 // AC10: a coupon is a few dozen bytes, so a body over 1.024 bytes is refused, and the connection is closed rather than
