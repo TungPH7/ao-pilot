@@ -316,6 +316,9 @@ async function readSpace({ jira, github, deploys, local, contract, mapping, rost
   return { items, pulls, runs: local.runStates(), ...(release && { release }) };
 }
 
+// The login of the deployer on GitHub: the bot of the App ao-deploy, whose slug is <owner>-ao-deploy (docs/github-apps-setup.md).
+const DEPLOYER = /-ao-deploy\[bot\]$/;
+
 // The release running in each environment of the mapping (release-workflow spec 2.5): the newest deployment whose
 // latest status is success, as { sha, deployment, url }, or null. GitHub sets the older ones inactive when a new one
 // succeeds, so a newer deploy that failed, or one still under way, leaves the one before running.
@@ -325,7 +328,8 @@ export async function readRunning(github, mapping) {
     running[env] = null;
     for (const { id, sha } of await github.get('/deployments', { environment, per_page: 30 })) {
       const [latest] = await github.get(`/deployments/${id}/statuses`, { per_page: 1 });
-      if (latest?.state !== 'success') continue;
+      // Only the deployer's word counts: qa sends the basic auth to the URL of this status (security, ao-pilot PR #17).
+      if (latest?.state !== 'success' || !DEPLOYER.test(latest.creator?.login ?? '')) continue;
       running[env] = { sha, deployment: id, url: latest.environment_url ?? null };
       break;
     }

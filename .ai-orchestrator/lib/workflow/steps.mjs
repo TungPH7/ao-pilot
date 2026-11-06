@@ -469,7 +469,11 @@ function decideQa(facts, options) {
   if (item.workType === 'epic') return stop(`${item.key} is an Epic: /ao-qa takes a Story, Task or Bug`, `/ao-status ${item.key}`);
   const flagged = flaggedStop(item);
   if (flagged) return flagged;
-  if (item.state !== 'ready-for-qa') return stop(`${item.key} is ${item.status}, not Ready for QA`, nextFor(item, pr?.number));
+  // A qa run the usage limit stopped may have picked the item up already: it goes on from In QA too.
+  const last = (facts.run?.runs ?? []).filter((r) => r.command === 'qa').at(-1);
+  const stopped = last && STOPPED.includes(last.outcome) && last.session ? last : null;
+  const states = stopped ? ['ready-for-qa', 'in-qa'] : ['ready-for-qa'];
+  if (!states.includes(item.state)) return stop(`${item.key} is ${item.status}, not Ready for QA`, nextFor(item, pr?.number));
   if (!pr?.merged || !pr.mergeCommit) return stop(`PR #${pr?.number ?? '?'} of ${item.key} is not merged`, `/ao-status ${item.key}`);
   const env = title(qa.environment);
   if (!qa.running) return stop(`${env} runs no release yet`, 'Wait for the deployer to run one; its deployments are on GitHub');
@@ -477,15 +481,18 @@ function decideQa(facts, options) {
     return stop(`${env} runs ${eight(qa.running.sha)}, which does not hold the merge of PR #${pr.number} (${eight(pr.mergeCommit)}) yet`, `Wait a minute for the deployer, then run /ao-qa ${item.key} again; if its deployment failed, read why on GitHub`);
   }
   if (!qa.running.url) return stop(noUrl(qa.running.sha, env), `/ao-status ${item.key}`);
-  const resumed = carryOn('qa', facts, options);
-  if (resumed) return resumed;
   const auth = qa.environment !== 'production';
   const qaRun = run('qa', 'qa', { key: item.key, type: item.type, environment: env, sha: qa.running.sha, url: qa.running.url, pr: pr.number, auth }, options, {
     worktree: { kind: 'qa', name: `${item.key}-qa`, sha: qa.running.sha, install: true },
     env: { E2E_BASE_URL: qa.running.url },
     qa: { environment: qa.environment, sha: qa.running.sha, auth },
   });
-  return go([qaRun], [`${env} runs ${eight(qa.running.sha)}, which holds the merge of PR #${pr.number}`]);
+  const lines = [`${env} runs ${eight(qa.running.sha)}, which holds the merge of PR #${pr.number}`];
+  // The run goes on in its session, in a new worktree with the same URL and basic auth: carryOn would drop them.
+  if (stopped) return go([{ ...qaRun, effort: stopped.effort ?? qaRun.effort, resume: stopped.session, prompt: resumePrompt(item.key) }], lines);
+  const resumed = carryOn('qa', facts, options);
+  if (resumed) return resumed;
+  return go([qaRun], lines);
 }
 
 // /ao-release and /ao-release <vX.Y.0> <sha> (release-workflow spec 2.2, 2.6, 6). Without arguments it prints the cut

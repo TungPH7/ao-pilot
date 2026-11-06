@@ -4,11 +4,12 @@
 // and a deployment status on GitHub says how it went. Each environment saves the record before the next one starts, and
 // a deploy under way is kept in the record, so a tick cut short is finished by the next one with the same deployment.
 // Every outside effect is a parameter: git in the mirror, the GitHub client, the audit, the installer, the record store.
+import { chmod, lstat, readdir } from 'node:fs/promises';
 import { posix } from 'node:path';
 import { formatError } from '../contract.mjs';
 import { parseBranch } from '../tracker/conventions.mjs';
 import { readDeployConfig } from './deploy-config.mjs';
-import { PRUNE_CACHE, buildArgs, containerEnv, parseSecrets, pruneImages, swap, treesToKeep } from './docker.mjs';
+import { PRUNE_CACHE, buildArgs, containerEnv, parseSecrets, pruneImages, readableMode, swap, treesToKeep } from './docker.mjs';
 import { hasBaseline, markRequest, recordRun, runsByEnvironment } from './record.mjs';
 import { smoke as runSmoke } from './smoke.mjs';
 import { ENVIRONMENTS, decideTarget } from './targets.mjs';
@@ -231,11 +232,23 @@ async function status(github, id, state, extra = {}) {
   await github.request('POST', `/deployments/${id}/statuses`, undefined, body);
 }
 
+// Gives every file and folder under `dir` the mode a build context needs (readableMode). Links are left alone: chmod
+// would follow them out of the worktree.
+export async function openForBuild(dir) {
+  await chmod(dir, readableMode((await lstat(dir)).mode & 0o777, true));
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const path = posix.join(dir, entry.name);
+    if (entry.isSymbolicLink()) continue;
+    if (entry.isDirectory()) await openForBuild(path);
+    else await chmod(path, readableMode((await lstat(path)).mode & 0o777, false));
+  }
+}
+
 // Builds and runs a project at a tree with T7's docker.mjs, from a worktree of the mirror. Resolves to { outcome,
 // reason, public }: 'success', with the public app and its port for Caddy; 'failure' when the new containers did not start or failed their smoke test, so the old ones
 // still serve; 'error' when nothing ran: no or a broken deploy.yaml, a missing secret, a failed build. An error of
 // Docker itself throws, and the next tick tries again.
-export function createInstaller({ project, git, docker, smoke = (checks, targets) => runSmoke({ checks, targets }), workDir, readSecrets }) {
+export function createInstaller({ project, git, docker, smoke = (checks, targets) => runSmoke({ checks, targets }), workDir, readSecrets, open = openForBuild }) {
   const failed = (reason) => ({ outcome: 'error', reason });
   return {
     async install({ env, sha, tree }) {
@@ -262,6 +275,11 @@ export function createInstaller({ project, git, docker, smoke = (checks, targets
       await git(['worktree', 'prune']);
       await git(['worktree', 'add', '--detach', '--force', dir, sha]);
       try {
+        try {
+          await open(dir);
+        } catch (error) {
+          return failed(`the build folder could not be opened: ${error.message}`);
+        }
         for (const [app, { dockerfile }] of Object.entries(config.apps)) {
           try {
             await docker(buildArgs({ project: project.name, app, tree, dockerfile, context: dir }));

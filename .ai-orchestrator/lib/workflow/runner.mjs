@@ -206,6 +206,10 @@ export function formatDecision(decision) {
         out.push(`${i + 1}. jira-sync for ${run.key}, with your gh login${run.then?.mergeGate ? `; then merge-gate merges the docs PR #${run.then.mergeGate}` : ''}`);
         return;
       }
+      if (run.action) {
+        out.push(`${i + 1}. ${run.action} for ${run.key}, a script: no agent runs`);
+        return;
+      }
       const extras = [run.resume && 'resumes its session', run.when && `when ${run.when}`, run.scope, run.effortWhy && `effort ${run.effort}: ${run.effortWhy}`].filter(Boolean);
       out.push(`${i + 1}. ${run.role} ${run.key}, ${run.purpose}, effort ${run.effort}${extras.length ? ` (${extras.join('; ')})` : ''}`);
     });
