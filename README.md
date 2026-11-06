@@ -4,7 +4,7 @@ Sandbox repository for the ai-orchestrator live tests (Jira space `DEMO`).
 
 - `.ai-orchestrator/`: hand-made copy of the kit, with the contract, the templates, the agent roster and the scripts.
 - `.claude/`: the kit hooks, the project settings, the ten agents, the shared rules and the vendored skills.
-- `.github/workflows/`: the kit's `CI`, `jira-sync`, `merge-gate` and `audit`, and a pretend `Deploy`.
+- `.github/workflows/`: the kit's `CI`, `jira-sync` and `merge-gate`. No workflow deploys: the deployer of the kit on the VPS does (see Deployment).
 - `Dockerfile`: the image of the cart server for the deployer of the kit (see Deployment).
 - `src/`: a small cart (`cart.ts`), its coupons (`coupon.ts`) and its page, rendered on the server (`page.ts`, `server.ts`).
 
@@ -57,15 +57,16 @@ npm run test:e2e      # Playwright E2E tests with the Chrome installed on this m
 
 E2E tests do not run in CI yet. Their names start with the acceptance criterion they cover, such as `AC1 …`.
 
-With `E2E_BASE_URL`, such as `https://pilot-dev.ao.t2g.io.vn`, the tests run against that environment, with basic auth from `E2E_HTTP_USER` and `E2E_HTTP_PASSWORD` when both are set. The tests tagged `@local` send requests a browser cannot send, so they still run on the server Playwright starts on this machine (`playwright.config.ts`).
+With `E2E_BASE_URL`, such as `https://pilot-dev.ao.t2g.io.vn`, the tests run against that environment, with basic auth from `E2E_HTTP_USER` and `E2E_HTTP_PASSWORD` when both are set, sent to the origin of `E2E_BASE_URL` only. The trace of a failed test holds that basic auth, so ao-step keeps those traces on this machine and does not attach them to Jira. The tests tagged `@local` send requests a browser cannot send, so they still run on the server Playwright starts on this machine (`playwright.config.ts`).
 
 ## Deployment
 
-The deployer of the kit builds the `Dockerfile` and runs one container per environment behind Caddy, which keeps HTTPS and basic auth and passes the public `Host` on as is (ADR-0003). The container runs as the user `node`, works with `--cap-drop ALL` and `--security-opt no-new-privileges`, and reads:
+The deployer of the kit, on the VPS, builds the `Dockerfile` from `.ai-orchestrator/deploy.yaml`, runs one container per environment behind Caddy and smoke-tests it; no GitHub workflow deploys. Caddy keeps HTTPS and basic auth and passes the public `Host` on as is (ADR-0003). The container runs as the user `node`, works with `--cap-drop ALL` and `--security-opt no-new-privileges`, and reads:
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `HOST` | `127.0.0.1` with `npm run serve`, `0.0.0.0` in the image | The address the server listens on |
 | `PORT` | `3000` | The port the server listens on |
-| `AO_PUBLIC_URL` | none | The public URL of the environment, such as `https://pilot-dev.ao.t2g.io.vn`: its host and origin are accepted besides the local ones. A value that is not an http or https origin stops the server at start |
+| `AO_PUBLIC_URL` | none | The public URL of the environment, such as `https://pilot-dev.ao.t2g.io.vn`: its host and origin are accepted besides the local ones. A value that is not an http or https origin stops the server at start, with exit code 1 and a message that says what is wrong without quoting the value |
 
+On `SIGTERM` (`docker stop`) or `SIGINT` (Ctrl+C) the server stops taking connections, closes the idle ones and exits with 0 once the requests in progress end, so `docker stop` does not wait for its timeout.
