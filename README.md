@@ -70,3 +70,5 @@ The deployer of the kit, on the VPS, builds the `Dockerfile` from `.ai-orchestra
 | `AO_PUBLIC_URL` | none | The public URL of the environment, such as `https://pilot-dev.ao.t2g.io.vn`: its host and origin are accepted besides the local ones. A value that is not an http or https origin stops the server at start, with exit code 1 and a message that says what is wrong without quoting the value |
 
 On `SIGTERM` (`docker stop`) or `SIGINT` (Ctrl+C) the server stops taking connections, closes the idle ones and exits with 0 once the requests in progress end, so `docker stop` does not wait for its timeout.
+
+A commit pushed straight to `develop`, without a pull request, does not deploy: the deployer refuses it until you read it and name a later head with `/ao-rollback development <sha>`.
