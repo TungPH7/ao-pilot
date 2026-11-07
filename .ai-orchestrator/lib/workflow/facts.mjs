@@ -253,6 +253,10 @@ export async function gatherFacts({ command, arg, jira, github, local, ...ctx })
   }
   // /ao-qa reads deployments with your gh login (`deploys`): the read token of ao-review may not (release-workflow T12).
   const qa = command === 'qa' && pr ? await readQaFacts(ctx.deploys, pr, ctx) : undefined;
+  // A kit another project reviewed needs no agent (kit-copy-review spec 2.1); with both reports on the head, nothing is
+  // left to compare. ctx.kitCopy(pr) resolves to null when the PR claims no such thing.
+  const missing = pr && ctx.gates.github_apps.review.roles.some((role) => !pr.reports[role]?.onHead);
+  const kitCopy = command === 'review' && missing && ctx.kitCopy ? await ctx.kitCopy(pr) : null;
   const guards = item.workType && item.workType !== 'epic' ? await githubGuards(github, { item, needed: ['dependencies-merged'], contract: ctx.contract, mapping: ctx.mapping }) : [];
   return {
     command,
@@ -264,6 +268,7 @@ export async function gatherFacts({ command, arg, jira, github, local, ...ctx })
     pr,
     dependenciesMerged: guards.includes('dependencies-merged'),
     ...(qa && { qa }),
+    ...(kitCopy && { kitCopy }),
     wip: await readWip(jira, item, ctx),
     ledger: local.ledger(item.key),
     // The Sub-tasks with a ledger: the agents of a split Story keep one per Sub-task.

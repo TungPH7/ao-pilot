@@ -61,7 +61,8 @@ function carryOn(command, facts, options, asker) {
     // A run is on record from its start (lib/workflow/runner.mjs): one killed before the first line of its log has no
     // session, and is made afresh (reviewer of ao-pilot PR #23).
     if (!last.session) return null;
-    const goOn = { role: last.role, key, effort: last.effort, purpose: last.purpose, resume: last.session, prompt: resumePrompt(key) };
+    // The head and the note stay on the record of the run: /ao-fix reads them to know a note is done.
+    const goOn = { role: last.role, key, effort: last.effort, purpose: last.purpose, resume: last.session, prompt: resumePrompt(key), ...(last.head && { head: last.head }), ...(last.note && { note: last.note }) };
     if (REVIEWS.includes(last.purpose)) {
       // A review goes on only on the head it was reviewing, with its worktree back, while its report is not on that
       // head: on a new head, ao-pr would post what it wrote about the old one as the report of the new head.
@@ -424,6 +425,14 @@ function decideReview(facts, options) {
   if (pr.ci.failed) return { ...stop(`CI is red on the head ${pr.headSha.slice(0, 7)} of PR #${pr.number}`, `/ao-fix ${pr.number}`), lines };
   const carried = carryOn('review', facts, options);
   if (carried) return { ...carried, lines };
+  // A kit another project reviewed in full: ao-step posts the reports, with no agent (kit-copy-review spec 2.1). A report
+  // an agent already put on the head stays. Any doubt falls through to the review by the agents.
+  const { kitCopy } = facts;
+  if (kitCopy && !kitCopy.ok) lines.push(`Kit review: ${kitCopy.reason}, so the agents review the PR`);
+  if (kitCopy?.ok) {
+    const roles = options.gates.github_apps.review.roles.filter((role) => !pr.reports[role]?.onHead);
+    if (roles.length > 0) return go([{ action: 'kit-copy-reports', key: facts.item.key, number: pr.number, title: pr.title, sha: pr.headSha, roles, reference: kitCopy.reference, compared: kitCopy.compared }], lines);
+  }
   const runs = reviewRuns(facts, options);
   if (runs.length > 0) return go(runs, lines);
   return { ...afterReviews(facts), lines };
@@ -445,11 +454,12 @@ function decideFix(facts, options) {
   const { pr, item } = facts;
   const carried = carryOn('fix', facts, { ...options, answers: undefined });
   if (carried) return { ...carried, lines };
-  // A fix of the same note pushed already: what is left is the reviews of the new head. The newest fix run counts, not
-  // the newest run of the command, which is a review once the reviewer ran (Pilot 1, PR #4 of ao-sample).
+  // A fix of the same note pushed already: what is left is the reviews of the new head. The newest fix run with a note
+  // counts, not the newest run of the command, which is a review once the reviewer ran (Pilot 1, PR #4 of ao-sample), nor
+  // the newest fix run, which has no note when it fixed a finding (review test of 2026-11-07).
   const asked = options.note?.trim() || undefined;
-  const lastFix = (facts.run?.runs ?? []).filter((r) => r.command === 'fix' && r.purpose === 'fix').at(-1);
-  const fixed = lastFix?.outcome === 'done' && lastFix.head !== pr.headSha && (lastFix.note ?? null) === (asked ? noteKey(asked) : null);
+  const lastNoted = (facts.run?.runs ?? []).filter((r) => r.command === 'fix' && r.purpose === 'fix' && r.note).at(-1);
+  const fixed = Boolean(asked) && lastNoted?.outcome === 'done' && lastNoted.head !== pr.headSha && lastNoted.note === noteKey(asked);
   const reasons = [];
   if (pr.changesRequested) reasons.push(`the changes requested on ${pr.headSha.slice(0, 7)}`);
   if (pr.ci.failed) reasons.push(`the red CI on ${pr.headSha.slice(0, 7)}`);
@@ -608,7 +618,8 @@ function decideHotfix(facts) {
   const h = facts.hotfix;
   const v = h.version;
   if (!h.production) return stop('Production runs no tagged release, so there is nothing to patch', '/ao-status');
-  if (h.production.sha === h.main.sha) return stop(`Production runs ${h.production.version} (${eight(h.main.sha)}), the hotfix: nothing is left to ship`, '/ao-status');
+  // Production runs the newest commit of main: the hotfix, once it went live; right after a release, its merge, no hotfix.
+  if (h.production.sha === h.main.sha && h.main.pull?.head?.startsWith('hotfix/')) return stop(`Production runs ${h.production.version} (${eight(h.main.sha)}), the hotfix: nothing is left to ship`, '/ao-status');
   // Its own tag moved the next patch on, so the request comes first (T22).
   if (h.tag?.sha === h.main.sha && h.request?.sha === h.main.sha) return stop(`${v} is tagged and deployment request #${h.request.id} asks for it on Production: the deployer takes it within a minute or two`, '/ao-status');
   if (v !== h.expected) return stop(`${v} is not the next patch of ${h.production.version} on Production: that is ${h.expected}`, `/ao-ship ${h.expected}`);

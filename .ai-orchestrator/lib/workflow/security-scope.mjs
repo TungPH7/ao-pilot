@@ -42,7 +42,8 @@ export function fullReviewEffort({ files, protectedPaths: touched = [], item, ga
   const labelled = [item, ...(item?.subtasks ?? [])].find((i) => i?.effort);
   if (labelled) return { effort: rosterEffort, reason: `${labelled.key} has the effort label ${labelled.effort}` };
   if (touched.length > 0) return { effort: rosterEffort, reason: `the PR touches the protected path ${touched.join(', ')}` };
-  const risky = files.filter((file) => rule.roster_effort_paths.some((glob) => matchesGlob(glob, file)));
+  // Whatever the case: `**/*auth*.*` must take in AuthProvider.tsx and useAuth.ts (review test of 2026-11-07).
+  const risky = files.filter((file) => rule.roster_effort_paths.some((glob) => matchesGlob(glob, file, { ignoreCase: true })));
   if (risky.length > 0) return { effort: rosterEffort, reason: `the PR touches ${risky.join(', ')}` };
   return { effort: rule.lower_effort, reason: 'no protected path, no path of security_review, no effort label' };
 }

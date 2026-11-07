@@ -35,6 +35,7 @@ import { releaseCutChanges } from '../lib/release/release-cut.mjs';
 import { changelogWith } from '../lib/release/release-pr.mjs';
 import { requestDeploy } from '../lib/release/deploy-request.mjs';
 import { adfText, buildReviewPack, filesToQuote } from '../lib/workflow/review-pack.mjs';
+import { postKitCopyReports, readKitCopy, renderedReason } from '../lib/workflow/kit-copy.mjs';
 import { removeInstructions } from '../lib/workflow/review-tree.mjs';
 import { agentCommand, formatDecision, runGo } from '../lib/workflow/runner.mjs';
 import { decideStep } from '../lib/workflow/steps.mjs';
@@ -169,7 +170,10 @@ async function main() {
   // The release commands read deployments with your gh login: the read token of ao-review may not (release-workflow T12).
   const userToken = RELEASE_COMMANDS.includes(command) ? readGitHubToken() : null;
   const deploys = userToken ? createGitHubClient({ repo, token: userToken }) : undefined;
-  const gather = () => gatherFacts({ command, arg, extra, jira, github, deploys, history: developHistory, local: files, contract, mapping, roster, gates, apps, approvers, space });
+  // A kit copy is compared with a head of another project, which your gh login reads (kit-copy-review spec 2.5).
+  const peers = (setting('AO_KIT_PEERS', settings) ?? '').split(',').map((name) => name.trim()).filter(Boolean);
+  const kitCopy = (pr) => readKitCopy({ pr, github, peer: (name) => createGitHubClient({ repo: name, token: readGitHubToken() }), peers, gates, apps, approvers, render: (sha) => renderCheck(pr.number, sha) });
+  const gather = () => gatherFacts({ command, arg, extra, jira, github, deploys, history: developHistory, local: files, contract, mapping, roster, gates, apps, approvers, space, kitCopy });
   const read = (file) => readFileSync(runsFile(projectDir, file), 'utf8');
   const options = { roster, contract, gates, mapping, ...(values.answers && { answers: read(values.answers) }), ...(values.note && { note: read(values.note) }) };
 
@@ -201,6 +205,7 @@ async function main() {
         if (step.action === 'release-pr') return releasePr(step, { repo, settings });
         if (step.action === 'hotfix-ship') return hotfixShip(step, { repo, settings, userToken });
         if (step.action === 'deploy-request') return deployRequest(step, { repo, userToken });
+        if (step.action === 'kit-copy-reports') return kitCopyReports(step, { repo, appEnv });
         return releaseCut(step, { repo, mapping, settings });
       },
       git: (checkout) => prepareCheckout(checkout),
@@ -375,14 +380,14 @@ function prepareCheckout({ branch, from, pull }) {
 // instruction files are still removed from it, in case a later Claude Code loads more. A stale worktree from a run that
 // was stopped is replaced. Node finds no node_modules there, so tests that need packages do not run in it.
 export const reviewTreePath = (project, name, tmp = tmpdir()) => join(tmp, 'ao-reviews', `${basename(resolve(project))}-${name}`);
-function addWorktree({ name, sha, install = false }) {
+function addWorktree({ name, sha, install = false, keepInstructions = false }) {
   const path = reviewTreePath(projectDir, name);
   if (existsSync(path)) removeWorktree({ name });
   mkdirSync(join(path, '..'), { recursive: true });
   const added = git('worktree', 'add', '--detach', '--quiet', path, sha);
   if (added.status !== 0) return { ok: false, reason: `git could not add the worktree of ${name} at ${sha.slice(0, 7)}: ${(added.stderr || added.stdout).trim()}` };
   try {
-    removeInstructions(path, { readdirSync, rmSync });
+    if (!keepInstructions) removeInstructions(path, { readdirSync, rmSync });
   } catch (error) {
     removeWorktree({ name });
     return { ok: false, reason: `the instruction files of the PR could not be removed from its worktree: ${error.message}` };
@@ -399,6 +404,35 @@ function addWorktree({ name, sha, install = false }) {
     }
   }
   return { ok: true, path: path.replaceAll('\\', '/') };
+}
+
+// Whether the rendered files of a kit copy are what their sources give (kit-copy-review spec 2.3). The renderer is the
+// one of this kit, never the PR's, and its sources were compared with the reviewed head before this runs. The tree keeps
+// its instruction files, which render-agents reads, because no agent runs in it.
+function renderCheck(number, sha) {
+  const name = `kit-copy-${number}`;
+  return renderedReason({
+    sha,
+    tree: {
+      add: () => {
+        const fetched = git('fetch', '--quiet', 'origin', `refs/pull/${number}/head`);
+        return fetched.status === 0 ? addWorktree({ name, sha, keepInstructions: true }) : { ok: false, reason: `git fetch failed: ${fetched.stderr.trim()}` };
+      },
+      remove: () => removeWorktree({ name }),
+    },
+    render: (path) => {
+      const env = { ...process.env };
+      for (const secretName of CLEARED_ENV) delete env[secretName];
+      const checked = spawnSync(process.execPath, [join(kitDir, 'scripts', 'render-agents.mjs'), '--check', '--project', path], { env, encoding: 'utf8' });
+      return { status: checked.status, text: `${checked.stdout ?? ''}${checked.stderr ?? ''}` };
+    },
+  });
+}
+
+// The reports of a kit copy, with the ao-review App, on the head that was compared (kit-copy-review spec 2.4).
+async function kitCopyReports(step, { repo, appEnv }) {
+  const { token } = await installationToken({ ...appCredentials('review', { env: appEnv }), repo, permissions: { pull_requests: 'write' } });
+  return postKitCopyReports({ github: createGitHubClient({ repo, token, write: true }), step });
 }
 
 // The first-parent history of develop on GitHub after the tag `tag`, oldest first, as parseHistory reads it
