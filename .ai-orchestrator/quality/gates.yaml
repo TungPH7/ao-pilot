@@ -126,8 +126,10 @@ kit_copy:
   same_when_changed: [".claude/skills/**"]
   # They hold the space key and the stack skills of the project: ao-step renders them again.
   rendered: [".claude/agents/**", ".claude/rules/ai-orchestrator.md"]
-  # A copy may point only at the newest PR of the other project on this path, so it cannot go back to an older kit.
+  # A copy may point only at the newest PR of the other project on this path and branch, so it cannot go back to an older
+  # kit.
   newest_path: .ai-orchestrator/lib
+  newest_branch: develop
 
 # The docs PR of an Epic (dev-workflow spec 2.4): every file it changes is under these paths, its head is this branch,
 # ao-dev opened it, and <EPIC> is an Epic. merge-gate merges it without reviews or approval once the Epic is past this

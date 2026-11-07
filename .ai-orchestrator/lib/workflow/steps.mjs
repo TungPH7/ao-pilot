@@ -428,8 +428,12 @@ function decideReview(facts, options) {
   // A kit another project reviewed in full: ao-step posts the reports, with no agent (kit-copy-review spec 2.1). A report
   // an agent already put on the head stays. Any doubt falls through to the review by the agents.
   const { kitCopy } = facts;
+  // Its report is a full one, which would clear the findings still open: those go to /ao-fix and the review of the new
+  // part, as on any PR (review of ao-pilot PR #24).
+  const open = Object.entries(pr.reports).filter(([, report]) => report?.blocking > 0).map(([role, report]) => `${role} ${report.blocking}`);
   if (kitCopy && !kitCopy.ok) lines.push(`Kit review: ${kitCopy.reason}, so the agents review the PR`);
-  if (kitCopy?.ok) {
+  else if (kitCopy && open.length > 0) lines.push(`Kit review: PR #${pr.number} still has Critical or High findings open (${open.join(', ')}), so the agents review the PR`);
+  if (kitCopy?.ok && open.length === 0) {
     const roles = options.gates.github_apps.review.roles.filter((role) => !pr.reports[role]?.onHead);
     if (roles.length > 0) return go([{ action: 'kit-copy-reports', key: facts.item.key, number: pr.number, title: pr.title, sha: pr.headSha, roles, reference: kitCopy.reference, compared: kitCopy.compared }], lines);
   }

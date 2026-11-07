@@ -172,7 +172,7 @@ async function main() {
   const deploys = userToken ? createGitHubClient({ repo, token: userToken }) : undefined;
   // A kit copy is compared with a head of another project, which your gh login reads (kit-copy-review spec 2.5).
   const peers = (setting('AO_KIT_PEERS', settings) ?? '').split(',').map((name) => name.trim()).filter(Boolean);
-  const kitCopy = (pr) => readKitCopy({ pr, github, peer: (name) => createGitHubClient({ repo: name, token: readGitHubToken() }), peers, gates, apps, approvers, render: (sha) => renderCheck(pr.number, sha) });
+  const kitCopy = (pr) => readKitCopy({ pr, github, peer: (name) => createGitHubClient({ repo: name, token: readGitHubToken() }), peers, gates, apps, approvers, render: (sha, paths) => renderCheck(pr.number, sha, paths) });
   const gather = () => gatherFacts({ command, arg, extra, jira, github, deploys, history: developHistory, local: files, contract, mapping, roster, gates, apps, approvers, space, kitCopy });
   const read = (file) => readFileSync(runsFile(projectDir, file), 'utf8');
   const options = { roster, contract, gates, mapping, ...(values.answers && { answers: read(values.answers) }), ...(values.note && { note: read(values.note) }) };
@@ -409,10 +409,11 @@ function addWorktree({ name, sha, install = false, keepInstructions = false }) {
 // Whether the rendered files of a kit copy are what their sources give (kit-copy-review spec 2.3). The renderer is the
 // one of this kit, never the PR's, and its sources were compared with the reviewed head before this runs. The tree keeps
 // its instruction files, which render-agents reads, because no agent runs in it.
-function renderCheck(number, sha) {
+function renderCheck(number, sha, paths) {
   const name = `kit-copy-${number}`;
   return renderedReason({
     sha,
+    paths,
     tree: {
       add: () => {
         const fetched = git('fetch', '--quiet', 'origin', `refs/pull/${number}/head`);
@@ -423,8 +424,11 @@ function renderCheck(number, sha) {
     render: (path) => {
       const env = { ...process.env };
       for (const secretName of CLEARED_ENV) delete env[secretName];
-      const checked = spawnSync(process.execPath, [join(kitDir, 'scripts', 'render-agents.mjs'), '--check', '--project', path], { env, encoding: 'utf8' });
-      return { status: checked.status, text: `${checked.stdout ?? ''}${checked.stderr ?? ''}` };
+      const run = (flag) => spawnSync(process.execPath, [join(kitDir, 'scripts', 'render-agents.mjs'), flag, '--project', path], { env, encoding: 'utf8' });
+      const checked = run('--check');
+      const listed = run('--list');
+      if (listed.status !== 0) return { status: listed.status, text: listed.stderr ?? '', files: [] };
+      return { status: checked.status, text: `${checked.stdout ?? ''}${checked.stderr ?? ''}`, files: listed.stdout.split('\n').map((line) => line.trim()).filter(Boolean) };
     },
   });
 }

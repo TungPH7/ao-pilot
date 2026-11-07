@@ -95,13 +95,14 @@
     },
     "kit_copy": {
       "type": "object",
-      "required": ["same", "same_when_changed", "rendered", "newest_path"],
+      "required": ["same", "same_when_changed", "rendered", "newest_path", "newest_branch"],
       "additionalProperties": false,
       "properties": {
         "same": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
         "same_when_changed": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
         "rendered": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
-        "newest_path": { "type": "string", "minLength": 1 }
+        "newest_path": { "type": "string", "minLength": 1 },
+        "newest_branch": { "type": "string", "minLength": 1 }
       }
     },
     "docs_pull_requests": {

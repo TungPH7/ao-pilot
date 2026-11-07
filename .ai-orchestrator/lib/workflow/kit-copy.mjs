@@ -19,11 +19,13 @@ const within = (globs, path) => globs.some((glob) => matchesGlob(glob, path));
 // What a tree holds at each path: kind, mode and content, so a link or a file made executable counts as a change.
 const entries = ({ tree }) => new Map(tree.filter(({ type }) => type !== 'tree').map(({ path, type, mode, sha }) => [path, `${type} ${mode} ${sha}`]));
 
-// claim: { repo, number }, from kitReviewOf. peers: the repositories of AO_KIT_PEERS. pr: { headSha, files }, files as
-// GET /pulls/{n}/files gives them. headTree: GET /git/trees/{head}?recursive=1. reference: { pull, reviews, newest, tree },
-// where newest is the newest commit of its base on gates.kit_copy.newest_path. Returns { ok: false, reason } or
-// { ok: true, compared, reference: { repo, number, head }, renders }; renders asks for the rendered files to be checked.
-export function decideKitCopy({ claim, peers, pr, headTree, reference, gates, apps, approvers }) {
+// claim: { repo, number }, from kitReviewOf. peers: the repositories of AO_KIT_PEERS. headTree and baseTree: GET
+// /git/trees/{sha}?recursive=1 of the head and of the merge base, so what the PR changes is read by SHA, with no list
+// GitHub cuts short (review of ao-pilot PR #24). reference: { pull, reviews, newest, tree }, where newest is the newest
+// commit of its base on gates.kit_copy.newest_path. Returns { ok: false, reason } or
+// { ok: true, compared, reference: { repo, number, head } }. The content of the rendered files is left to the render
+// check that follows.
+export function decideKitCopy({ claim, peers, headTree, baseTree, reference, gates, apps, approvers }) {
   const no = (reason) => ({ ok: false, reason });
   const name = `${claim.repo}#${claim.number}`;
   if (!peers.includes(claim.repo)) return no(`${claim.repo} is not in AO_KIT_PEERS`);
@@ -41,27 +43,38 @@ export function decideKitCopy({ claim, peers, pr, headTree, reference, gates, ap
   const rule = gates.kit_copy;
   if (newest !== pull.merge_commit_sha) return no(`${name} is not the newest PR of ${claim.repo} on ${rule.newest_path}`);
   if (headTree.truncated) return no('the tree of the head is too large for GitHub to list');
+  if (baseTree.truncated) return no('the tree of the merge base is too large for GitHub to list');
   if (tree.truncated) return no(`the tree of ${name} is too large for GitHub to list`);
 
   const ours = entries(headTree);
+  const before = entries(baseTree);
   const theirs = entries(tree);
   const compared = new Set();
-  let renders = false;
   const differs = (path) => {
     compared.add(path);
     return (ours.get(path) ?? null) !== (theirs.get(path) ?? null);
   };
-  // A renamed file counts by both names; the same comparison covers a file removed, which must be gone there too.
-  for (const path of pr.files.flatMap(({ filename, previous_filename: previous }) => (previous ? [previous, filename] : [filename]))) {
-    if (within(rule.rendered, path)) renders = true;
-    else if (!within([...rule.same, ...rule.same_when_changed], path)) return no(`the PR changes ${path}, which is not a kit file`);
-    else if (differs(path)) return no(`${path} differs from ${name}`);
-  }
-  // Both ways: a part of the copy left out, or a file added beside it, is a kit nobody reviewed as a whole.
-  for (const path of [...new Set([...ours.keys(), ...theirs.keys()])].filter((p) => within(rule.same, p)).sort()) {
+  const union = (...maps) => [...new Set(maps.flatMap((map) => [...map.keys()]))].sort();
+  // What the PR changes: a file added, removed or changed; a renamed file by both names.
+  for (const path of union(before, ours).filter((p) => (before.get(p) ?? null) !== (ours.get(p) ?? null))) {
+    if (within(rule.rendered, path)) continue;
+    if (!within([...rule.same, ...rule.same_when_changed], path)) return no(`the PR changes ${path}, which is not a kit file`);
+    // A skill only this project has is missing from the reference too, which is no match (review of ao-pilot PR #24).
+    if (within(rule.same_when_changed, path) && !ours.has(path)) return no(`the PR removes ${path}, which only a review can judge`);
     if (differs(path)) return no(`${path} differs from ${name}`);
   }
-  return { ok: true, compared: compared.size, reference: { repo: claim.repo, number: claim.number, head }, renders };
+  // Both ways: a part of the copy left out, or a file added beside it, is a kit nobody reviewed as a whole.
+  for (const path of union(ours, theirs).filter((p) => within(rule.same, p))) {
+    if (differs(path)) return no(`${path} differs from ${name}`);
+  }
+  // The rendered files hold the space key of each project, so they are not compared with it. The render check that
+  // follows says which of them render-agents writes and whether they match their sources; here they must be plain files,
+  // since a link or a submodule there would be read through.
+  for (const path of [...ours.keys()].filter((p) => within(rule.rendered, p))) {
+    compared.add(path);
+    if (ours.get(path).split(' ', 2).join(' ') !== 'blob 100644') return no(`${path} is not a plain file`);
+  }
+  return { ok: true, compared: compared.size, reference: { repo: claim.repo, number: claim.number, head } };
 }
 
 // Reads what decideKitCopy needs and decides. null when the PR makes no claim or the kit has no kit_copy block; on any
@@ -76,32 +89,42 @@ export async function readKitCopy({ pr, github, peer, peers, gates, apps, approv
     const client = peer(claim.repo);
     const pull = await client.get(`/pulls/${claim.number}`);
     const reviews = await client.getAll(`/pulls/${claim.number}/reviews`);
-    const [newest] = await client.get('/commits', { path: gates.kit_copy.newest_path, sha: pull.base.ref, per_page: 1 });
+    // On develop of the peer, whatever branch the reference was merged into: a PR merged into a release branch would
+    // otherwise lead back to an older kit (review of ao-pilot PR #24).
+    const [newest] = await client.get('/commits', { path: gates.kit_copy.newest_path, sha: gates.kit_copy.newest_branch, per_page: 1 });
     const tree = await client.get(`/git/trees/${pull.head.sha}`, { recursive: 1 });
     const head = pr.headSha;
-    const files = await github.getAll(`/pulls/${pr.number}/files`);
+    // The base by its merge base with the head, as the diff of the PR has it; branch names keep their slashes.
+    const { merge_base_commit: mergeBase } = await github.get(`/compare/${encodeURIComponent(pr.base).replaceAll('%2F', '/')}...${head}`);
+    const baseTree = await github.get(`/git/trees/${mergeBase.sha}`, { recursive: 1 });
     const headTree = await github.get(`/git/trees/${head}`, { recursive: 1 });
-    // The list of files is of the head at that moment, and only the tree is read by its SHA.
+    // The reports go on this head: after a push, say so rather than post on a head that is no longer the PR's.
     const now = (await github.get(`/pulls/${pr.number}`)).head.sha;
     if (now !== head) return { ok: false, reason: `the head of PR #${pr.number} moved from ${head.slice(0, 7)} while it was compared` };
-    const decision = decideKitCopy({ claim, peers, pr: { headSha: head, files }, headTree, reference: { pull, reviews, newest: newest?.sha, tree }, gates, apps, approvers });
-    if (!decision.ok || !decision.renders) return decision;
-    const wrong = await render(head);
+    const decision = decideKitCopy({ claim, peers, headTree, baseTree, reference: { pull, reviews, newest: newest?.sha, tree }, gates, apps, approvers });
+    if (!decision.ok) return decision;
+    // Always: sources changed without their rendered files would leave the agents of the project stale.
+    const rendered = headTree.tree.filter(({ type, path }) => type !== 'tree' && within(gates.kit_copy.rendered, path)).map(({ path }) => path);
+    const wrong = await render(head, rendered);
     return wrong ? { ok: false, reason: wrong } : decision;
   } catch (error) {
     return { ok: false, reason: `could not read the reference: ${error.message}` };
   }
 }
 
-// Why the rendered files at `sha` are not what their sources give, or null (spec 2.3). tree: { add, remove }, a copy of
-// the head that no agent reads, removed whatever happens; render(path): { status, text } of render-agents.mjs --check.
-export function renderedReason({ sha, tree, render }) {
+// Why the rendered files at `sha` are not what their sources give, or null (spec 2.3). paths: the files of the head
+// among the rendered ones; tree: { add, remove }, a copy of the head that no agent reads, removed whatever happens;
+// render(path): { status, text, files }, the outcome of render-agents.mjs --check and the files --list names.
+export function renderedReason({ sha, paths, tree, render }) {
   const short = sha.slice(0, 7);
   const added = tree.add();
   if (!added.ok) return `the tree of ${short} could not be made: ${added.reason}`;
   try {
-    const { status, text } = render(added.path);
-    return status === 0 ? null : `the rendered files at ${short} do not match their sources: ${text.trim()}`;
+    const { status, text, files } = render(added.path);
+    if (status !== 0) return `the rendered files at ${short} do not match their sources: ${text.trim()}`;
+    // --check compares only the files it renders: one beside them would be read by no one (review of ao-pilot PR #24).
+    const extra = paths.filter((path) => !files.includes(path));
+    return extra.length > 0 ? `the PR has ${extra.join(', ')} among the rendered files, which render-agents does not write` : null;
   } finally {
     tree.remove();
   }
